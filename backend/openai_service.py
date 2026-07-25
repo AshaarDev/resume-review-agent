@@ -6,7 +6,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from backend.system_prompt import SYSTEM_PROMPT
+from system_prompt import SYSTEM_PROMPT
 
 load_dotenv()
 

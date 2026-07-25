@@ -1,4 +1,11 @@
+from typing import Optional
 from pydantic import BaseModel, Field, field_validator
+
+
+class ResumeAnalysisRequest(BaseModel):
+    file_base64: str = Field(..., description="Base64 encoded resume file")
+    file_type: str = Field(..., description="File extension (pdf, docx, jpg, png, etc.)")
+    job_description: Optional[str] = Field(default="", description="Optional job description")
 
 
 class ChatRequest(BaseModel):
