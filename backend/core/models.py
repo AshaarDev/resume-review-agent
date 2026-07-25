@@ -1,3 +1,5 @@
+"""Pydantic models for API requests and responses."""
+
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 

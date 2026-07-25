@@ -1,8 +1,8 @@
-"""Resume parsing utilities for extracting text and analyzing formatting from various file formats."""
+"""Resume parsing utilities for extracting text from various file formats."""
 
 import base64
 import io
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from pathlib import Path
 
 
@@ -11,10 +11,7 @@ class ResumeParser:
     
     @staticmethod
     def parse_pdf(file_path: str) -> Dict[str, Any]:
-        """
-        Extract text and metadata from PDF resume.
-        Uses PyPDF2 for text extraction and pdf2image for visual analysis.
-        """
+        """Extract text and metadata from PDF resume."""
         try:
             import PyPDF2
             
@@ -46,10 +43,7 @@ class ResumeParser:
     
     @staticmethod
     def parse_docx(file_path: str) -> Dict[str, Any]:
-        """
-        Extract text from DOCX resume.
-        Uses python-docx for text extraction.
-        """
+        """Extract text from DOCX resume."""
         try:
             from docx import Document
             
@@ -81,16 +75,12 @@ class ResumeParser:
     
     @staticmethod
     def parse_image(file_path: str) -> Dict[str, Any]:
-        """
-        Extract text from image resume using OCR.
-        Uses pytesseract for OCR and PIL for image processing.
-        """
+        """Extract text from image resume using OCR."""
         try:
             from PIL import Image
             import pytesseract
             
             image = Image.open(file_path)
-            
             text_content = pytesseract.image_to_string(image)
             
             metadata = {
@@ -115,10 +105,7 @@ class ResumeParser:
     
     @staticmethod
     def parse_from_base64(base64_data: str, file_type: str) -> Dict[str, Any]:
-        """
-        Parse resume from base64 encoded data.
-        Useful for API uploads.
-        """
+        """Parse resume from base64 encoded data."""
         try:
             file_data = base64.b64decode(base64_data)
             
@@ -182,86 +169,28 @@ class ResumeParser:
             }
     
     @staticmethod
-    def analyze_formatting(file_path: str) -> Dict[str, Any]:
-        """
-        Analyze resume formatting and visual structure.
-        Returns insights about layout, fonts, spacing, etc.
-        """
-        file_ext = Path(file_path).suffix.lower()
-        
-        formatting_analysis = {
-            "has_sections": False,
-            "has_bullet_points": False,
-            "estimated_length": 0,
-            "visual_quality": "unknown"
-        }
-        
-        try:
-            if file_ext == '.pdf':
-                import PyPDF2
-                with open(file_path, 'rb') as file:
-                    pdf_reader = PyPDF2.PdfReader(file)
-                    text = ""
-                    for page in pdf_reader.pages:
-                        text += page.extract_text()
-                    
-                    formatting_analysis["estimated_length"] = len(text.split())
-                    formatting_analysis["has_bullet_points"] = any(char in text for char in ['•', '●', '○', '-'])
-                    formatting_analysis["has_sections"] = text.count('\n\n') > 3
-                    
-            elif file_ext == '.docx':
-                from docx import Document
-                doc = Document(file_path)
-                
-                text = "\n".join([p.text for p in doc.paragraphs])
-                formatting_analysis["estimated_length"] = len(text.split())
-                formatting_analysis["has_bullet_points"] = any(char in text for char in ['•', '●', '○'])
-                formatting_analysis["has_sections"] = len([p for p in doc.paragraphs if p.style.name.startswith('Heading')]) > 0
-            
-            return {
-                "formatting": formatting_analysis,
-                "success": True
-            }
-            
-        except Exception as e:
-            return {
-                "formatting": formatting_analysis,
-                "success": False,
-                "error": str(e)
-            }
-    
-    @staticmethod
     def parse_resume(file_path: str) -> Dict[str, Any]:
-        """
-        Main method to parse resume from any supported format.
-        Auto-detects file type and uses appropriate parser.
-        """
+        """Parse resume from any supported format (auto-detect)."""
         file_ext = Path(file_path).suffix.lower()
         
         if file_ext == '.pdf':
-            result = ResumeParser.parse_pdf(file_path)
+            return ResumeParser.parse_pdf(file_path)
         elif file_ext in ['.docx', '.doc']:
-            result = ResumeParser.parse_docx(file_path)
+            return ResumeParser.parse_docx(file_path)
         elif file_ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
-            result = ResumeParser.parse_image(file_path)
+            return ResumeParser.parse_image(file_path)
         elif file_ext == '.txt':
             with open(file_path, 'r', encoding='utf-8') as f:
                 text = f.read()
-            result = {
+            return {
                 "text": text,
                 "metadata": {"file_type": "text"},
                 "success": True
             }
         else:
-            result = {
+            return {
                 "text": "",
                 "metadata": {},
                 "success": False,
                 "error": f"Unsupported file format: {file_ext}"
             }
-        
-        if result["success"]:
-            formatting = ResumeParser.analyze_formatting(file_path)
-            result["formatting"] = formatting.get("formatting", {})
-        
-        return result

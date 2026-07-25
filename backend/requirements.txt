@@ -1,13 +1,15 @@
-fastapi==0.115.0
-uvicorn==0.32.0
-pydantic==2.9.0
-python-dotenv==1.0.1
-openai>=1.55.0
-mcp>=1.0.0
+# Core dependencies
+fastapi>=0.115.0
+uvicorn>=0.32.0
+pydantic>=2.9.0
+python-dotenv>=1.0.1
 
-# Resume parsing libraries
+# OpenAI with compatible httpx
+openai>=1.55.0
+httpx>=0.27.0,<1.0.0
+
+# Resume parsing
 PyPDF2>=3.0.0
 python-docx>=1.1.0
 Pillow>=10.0.0
 pytesseract>=0.3.10
-pdf2image>=1.16.0
