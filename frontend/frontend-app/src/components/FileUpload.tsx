@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import './FileUpload.css';
 
 interface FileUploadProps {
-  onFileSelect: (file: File) => void;
+  onFileSelect: (file: File | null) => void;
   disabled?: boolean;
 }
 
@@ -46,6 +46,10 @@ export const FileUpload = ({ onFileSelect, disabled }: FileUploadProps) => {
       alert('Please upload a PDF, DOCX, JPG, or PNG file');
       return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Please upload a file no larger than 10MB');
+      return;
+    }
 
     setSelectedFile(file);
     onFileSelect(file);
@@ -60,6 +64,7 @@ export const FileUpload = ({ onFileSelect, disabled }: FileUploadProps) => {
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedFile(null);
+    onFileSelect(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }

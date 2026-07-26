@@ -3,11 +3,21 @@
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
+from core.review_schemas import (
+    UnifiedResumeReviewResponse,
+    VisualReviewResponse,
+)
+
 
 class ResumeAnalysisRequest(BaseModel):
     file_base64: str = Field(..., description="Base64 encoded resume file")
     file_type: str = Field(..., description="File extension (pdf, docx, jpg, png, etc.)")
     job_description: Optional[str] = Field(default="", description="Optional job description")
+
+
+class VisualReviewRequest(BaseModel):
+    file_base64: str = Field(..., description="Base64 encoded resume file")
+    file_type: str = Field(..., description="File extension (pdf, docx, jpg, or png)")
 
 
 class ChatRequest(BaseModel):
@@ -27,3 +37,14 @@ class ChatResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+__all__ = [
+    "ChatRequest",
+    "ChatResponse",
+    "HealthResponse",
+    "ResumeAnalysisRequest",
+    "UnifiedResumeReviewResponse",
+    "VisualReviewRequest",
+    "VisualReviewResponse",
+]

@@ -20,7 +20,7 @@ class ResumeParser:
                 
                 text_content = ""
                 for page in pdf_reader.pages:
-                    text_content += page.extract_text() + "\n"
+                    text_content += (page.extract_text() or "") + "\n"
                 
                 metadata = {
                     "num_pages": len(pdf_reader.pages),
@@ -116,7 +116,7 @@ class ResumeParser:
                 
                 text_content = ""
                 for page in pdf_reader.pages:
-                    text_content += page.extract_text() + "\n"
+                    text_content += (page.extract_text() or "") + "\n"
                 
                 return {
                     "text": text_content.strip(),

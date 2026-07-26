@@ -1,10 +1,26 @@
-"""API routes for resume analysis and chat."""
+"""API routes for independent and unified resume reviews."""
 
 from fastapi import APIRouter, HTTPException
 
-from core.models import ChatRequest, ChatResponse, HealthResponse, ResumeAnalysisRequest
+from core.models import (
+    ChatRequest,
+    ChatResponse,
+    HealthResponse,
+    ResumeAnalysisRequest,
+    UnifiedResumeReviewResponse,
+    VisualReviewRequest,
+    VisualReviewResponse,
+)
 from services.openai_service import run_chat
-from services.resume_parser import ResumeParser
+from services.document_processor import (
+    DocumentProcessingError,
+    decode_resume_file,
+    normalize_file_type,
+)
+from services.review_orchestrator import (
+    analyze_resume_bytes,
+    analyze_visual_bytes,
+)
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -31,44 +47,41 @@ def chat(request: ChatRequest) -> ChatResponse:
     return ChatResponse(response=response_text)
 
 
-@router.post("/analyze-resume", response_model=ChatResponse)
-def analyze_resume(request: ResumeAnalysisRequest) -> ChatResponse:
-    """Analyze a resume and provide feedback."""
+def _decode_request(file_base64: str, file_type: str) -> tuple[bytes, str]:
     try:
-        print(f"Parsing resume of type: {request.file_type}")
-        parsed_data = ResumeParser.parse_from_base64(request.file_base64, request.file_type)
-        
-        if not parsed_data["success"]:
-            error_msg = parsed_data.get('error', 'Unknown error')
-            print(f"Parse error: {error_msg}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to parse resume: {error_msg}"
-            )
-        
-        resume_text = parsed_data["text"]
-        print(f"Extracted text length: {len(resume_text)} characters")
-        prompt = f"Please review this resume and provide detailed feedback:\n\n{resume_text}"
-        
-        if request.job_description:
-            prompt += f"\n\nJob Description:\n{request.job_description}\n\nPlease tailor your feedback to this job description."
-        
-        print("Calling LLM...")
-        response_text = run_chat(prompt)
-        print("LLM response received")
-        
-        return ChatResponse(response=response_text)
-        
-    except HTTPException:
-        raise
-    except RuntimeError as exc:
-        print(f"Runtime error: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except Exception as exc:
-        print(f"Exception: {type(exc).__name__}: {exc}")
-        import traceback
-        traceback.print_exc()
+        normalized_type = normalize_file_type(file_type)
+        file_bytes = decode_resume_file(file_base64)
+        return file_bytes, normalized_type
+    except DocumentProcessingError as exc:
         raise HTTPException(
-            status_code=502,
-            detail=f"Error: {str(exc)}",
+            status_code=400,
+            detail={"code": exc.code, "message": str(exc)},
         ) from exc
+
+
+@router.post(
+    "/analyze-resume",
+    response_model=UnifiedResumeReviewResponse,
+)
+def analyze_resume(request: ResumeAnalysisRequest) -> UnifiedResumeReviewResponse:
+    """Return content, visual, and deterministic layout reviews together."""
+
+    file_bytes, file_type = _decode_request(
+        request.file_base64, request.file_type
+    )
+    return analyze_resume_bytes(
+        file_bytes, file_type, request.job_description or ""
+    )
+
+
+@router.post(
+    "/analyze-resume-visual",
+    response_model=VisualReviewResponse,
+)
+def analyze_resume_visual(request: VisualReviewRequest) -> VisualReviewResponse:
+    """Run only the visual branch for development and troubleshooting."""
+
+    file_bytes, file_type = _decode_request(
+        request.file_base64, request.file_type
+    )
+    return analyze_visual_bytes(file_bytes, file_type)

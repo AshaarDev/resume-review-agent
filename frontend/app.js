@@ -46,7 +46,6 @@ function handleFile(file) {
     const validTypes = [
         'application/pdf',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/msword',
         'image/jpeg',
         'image/png',
         'image/jpg'
@@ -54,6 +53,10 @@ function handleFile(file) {
 
     if (!validTypes.includes(file.type)) {
         alert('Please upload a PDF, DOCX, or image file');
+        return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+        alert('Please upload a file no larger than 10MB');
         return;
     }
 
@@ -163,26 +166,52 @@ function formatFileSize(bytes) {
 
 // Helper: Display results
 function displayResults(result) {
-    let html = '';
+    const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
 
-    if (result.error) {
-        html = `<div class="error">${result.error}</div>`;
-    } else {
-        // Format the response text with basic markdown-like parsing
-        const text = result.response || 'No response received';
-        
-        // Convert markdown-style formatting to HTML
-        html = text
-            .replace(/## (.*?)$/gm, '<h3>$1</h3>')
-            .replace(/### (.*?)$/gm, '<h4>$1</h4>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/- (.*?)$/gm, '<li>$1</li>')
-            .replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
-            .replace(/\n\n/g, '<br><br>')
-            .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-        
-        html = `<div>${html}</div>`;
+    const content = result.content_review;
+    const visual = result.visual_review;
+    const layout = result.layout_analysis;
+
+    const contentHtml = content.status === 'available'
+        ? `<div>${escapeHtml(content.response).replaceAll('\n', '<br>')}</div>`
+        : `<div class="error">${escapeHtml(content.error_message)}</div>`;
+
+    let visualHtml = `<div class="error">${escapeHtml(visual.error_message)}</div>`;
+    if (visual.status === 'available' && visual.result) {
+        const strengths = visual.result.strengths
+            .map((item) => `<li>${escapeHtml(item)}</li>`)
+            .join('');
+        const issues = visual.result.issues
+            .map((issue) => `<li><strong>${escapeHtml(issue.code)}</strong>
+                (${escapeHtml(issue.severity)}): ${escapeHtml(issue.description)}
+                <br>Recommendation: ${escapeHtml(issue.recommendation)}</li>`)
+            .join('');
+        visualHtml = `
+            <p><strong>Score:</strong> ${visual.result.visual_score}/100</p>
+            ${strengths ? `<h4>Strengths</h4><ul>${strengths}</ul>` : ''}
+            ${issues ? `<h4>Issues</h4><ul>${issues}</ul>` : ''}
+        `;
     }
 
-    resultsContent.innerHTML = html;
+    let layoutHtml = `<div class="error">${escapeHtml(layout.error_message)}</div>`;
+    if (layout.status === 'available') {
+        const pages = layout.pages
+            .map((page) => `<li>Page ${page.page_number}:
+                ${page.width_points.toFixed(1)} × ${page.height_points.toFixed(1)} pt,
+                ${(page.text_density * 100).toFixed(1)}% text density,
+                median font ${page.median_font_size ?? 'not detected'} pt</li>`)
+            .join('');
+        layoutHtml = `<p>${layout.page_count} page(s)</p><ul>${pages}</ul>`;
+    }
+
+    resultsContent.innerHTML = `
+        <h3>Content review</h3>${contentHtml}
+        <h3>Visual review</h3>${visualHtml}
+        <h3>Layout analysis</h3>${layoutHtml}
+    `;
 }

@@ -28,3 +28,10 @@ Thumbs.db
 *.egg-info/
 dist/
 build/
+
+# Request-scoped document processing
+backend/temp/
+
+# Files staged for path-based MCP tools
+backend/uploads/*
+!backend/uploads/.gitkeep
