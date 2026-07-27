@@ -13,7 +13,7 @@ class Settings:
     MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4o-mini")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_VISION_MODEL: str = os.getenv(
-        "GEMINI_VISION_MODEL", "gemini-3.6-flash"
+        "GEMINI_VISION_MODEL", "gemini-1.5-flash"
     )
     GEMINI_TIMEOUT_SECONDS: int = int(
         os.getenv("GEMINI_TIMEOUT_SECONDS", "60")
@@ -35,6 +35,15 @@ class Settings:
     )
     MCP_ALLOWED_FILE_ROOTS: str = os.getenv(
         "MCP_ALLOWED_FILE_ROOTS", "uploads"
+    )
+    
+    # Orchestrator configuration
+    ORCHESTRATOR_MODEL: str = os.getenv("ORCHESTRATOR_MODEL", "gpt-5.6-luna")
+    ORCHESTRATOR_REASONING_EFFORT: str = os.getenv(
+        "ORCHESTRATOR_REASONING_EFFORT", "low"
+    )
+    ORCHESTRATOR_TIMEOUT_SECONDS: int = int(
+        os.getenv("ORCHESTRATOR_TIMEOUT_SECONDS", "60")
     )
     
     SYSTEM_PROMPT: str = """You are a helpful resume review assistant.

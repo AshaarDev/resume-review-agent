@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { FileUpload } from './components/FileUpload';
 import { analyzeResume } from './services/api';
 import type { AnalysisResponse } from './types';
@@ -36,6 +37,144 @@ function App() {
     }
   };
 
+  const handleMockTest = () => {
+    setError('');
+    setAnalysis({
+      content_review: {
+        status: 'available',
+        response: `## Resume Analysis Summary
+
+Your resume shows **strong technical foundation** with room for strategic improvements.
+
+### Key Strengths
+
+- **Clear technical skills section** with relevant technologies
+- Well-organized work experience with *consistent formatting*
+- Good use of action verbs in bullet points
+- Clean, professional layout
+
+### Areas for Improvement
+
+#### 1. Quantify Your Achievements
+
+Instead of:
+> "Improved application performance"
+
+Try:
+> "Improved application performance by **40%**, reducing load time from 3s to 1.8s"
+
+#### 2. Add Impact Metrics
+
+Current bullet points lack measurable outcomes. Consider adding:
+
+- Revenue impact: \`$500K+ in cost savings\`
+- Scale: \`Serving 10M+ daily active users\`
+- Team size: \`Led team of 5 engineers\`
+
+#### 3. Technical Projects Section
+
+Create a dedicated section showcasing:
+
+1. **Personal projects** with GitHub links
+2. **Open source contributions**
+3. **Technical blog posts** or publications
+
+### Recommended Action Items
+
+| Priority | Action | Expected Impact |
+|----------|--------|-----------------|
+| High | Add quantifiable metrics to top 3 achievements | Immediate credibility boost |
+| High | Include 2-3 technical projects | Demonstrates passion |
+| Medium | Add certifications section | Professional validation |
+| Low | Update skills with latest frameworks | Shows continuous learning |
+
+### Code Example Format
+
+When describing technical work, use this structure:
+
+\`\`\`
+Problem → Solution → Result
+\`\`\`
+
+**Example:**
+- **Problem**: Legacy monolith causing deployment delays
+- **Solution**: Migrated to microservices architecture using Docker/K8s
+- **Result**: Reduced deployment time from 2 hours to 15 minutes
+
+### Next Steps
+
+1. ✅ Add metrics to your top 5 achievements
+2. ✅ Create a projects section
+3. ✅ Include links to GitHub/portfolio
+4. ⚠️ Keep total length to 1-2 pages
+
+---
+
+**Overall Score**: 7.5/10
+
+With these improvements, your resume will stand out to technical recruiters and hiring managers.`,
+        error_code: null,
+        error_message: null,
+      },
+      visual_review: {
+        status: 'available',
+        result: {
+          visual_score: 85,
+          pass_status: true,
+          strengths: [
+            'Consistent font hierarchy throughout',
+            'Good use of whitespace for readability',
+            'Professional color scheme',
+          ],
+          issues: [
+            {
+              code: 'INCONSISTENT_ALIGNMENT',
+              description: 'Date alignment varies between sections',
+              severity: 'minor',
+              affected_area: 'Work Experience section',
+              recommendation: 'Align all dates to the right margin',
+            },
+            {
+              code: 'INCONSISTENT_SPACING',
+              description: 'Spacing between sections is not uniform',
+              severity: 'minor',
+              affected_area: 'Multiple sections',
+              recommendation: 'Use consistent 12pt spacing between sections',
+            },
+          ],
+        },
+        error_code: null,
+        error_message: null,
+        page_count: 1,
+      },
+      layout_analysis: {
+        status: 'available',
+        page_count: 1,
+        pages: [
+          {
+            page_number: 1,
+            width_points: 612.0,
+            height_points: 792.0,
+            text_density: 0.45,
+            font_sizes: [10.0, 11.0, 12.0, 14.0, 16.0],
+            min_font_size: 10.0,
+            max_font_size: 16.0,
+            median_font_size: 11.0,
+            dominant_font_size: 11.0,
+          },
+        ],
+        error_code: null,
+        error_message: null,
+      },
+      metadata: {
+        file_type: 'pdf',
+        file_size_bytes: 45678,
+        page_count: 1,
+        processing_time_ms: 1234.56,
+      },
+    });
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -69,6 +208,14 @@ function App() {
           {loading ? '🔄 Analyzing...' : '✨ Analyze Resume'}
         </button>
 
+        <button
+          className="mock-test-btn"
+          onClick={handleMockTest}
+          disabled={loading}
+        >
+          🧪 Test with Mock Response
+        </button>
+
         {error && (
           <div className="error-message">
             <span>⚠️</span>
@@ -82,9 +229,9 @@ function App() {
             <div className="analysis-content">
               <h3>Content review</h3>
               {analysis.content_review.status === 'available' ? (
-                analysis.content_review.response?.split('\n').map((line, index) => (
-                  <p key={index}>{line}</p>
-                ))
+                <div className="markdown-content">
+                  <ReactMarkdown>{analysis.content_review.response || ''}</ReactMarkdown>
+                </div>
               ) : (
                 <p>{analysis.content_review.error_message}</p>
               )}

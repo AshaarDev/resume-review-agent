@@ -14,6 +14,9 @@ google-genai>=1.0.0
 # MCP Server
 mcp>=1.0.0
 
+# LangGraph workflow orchestration
+langgraph>=1.0,<2.0
+
 # Resume parsing
 PyPDF2>=3.0.0
 PyMuPDF>=1.23.0

@@ -36,3 +36,7 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+
+# Application runtime directories
+temp/
+uploads/

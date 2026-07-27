@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from core.review_schemas import VisualReviewResult
 from main import app
-from services import document_processor, review_orchestrator
+from services import document_processor, review_pipeline
 from services.gemini_service import GeminiServiceError
 
 client = TestClient(app)
@@ -26,10 +26,10 @@ def _pdf_base64() -> str:
 def test_unified_endpoint_returns_all_review_branches(monkeypatch, tmp_path):
     monkeypatch.setattr(document_processor, "TEMP_ROOT", tmp_path)
     monkeypatch.setattr(
-        review_orchestrator, "run_chat", lambda prompt: "Strong content."
+        review_pipeline, "run_chat", lambda prompt: "Strong content."
     )
     monkeypatch.setattr(
-        review_orchestrator,
+        review_pipeline,
         "review_resume_visually",
         lambda image_paths, layout: VisualReviewResult(
             visual_score=91,
@@ -61,14 +61,14 @@ def test_unified_endpoint_returns_all_review_branches(monkeypatch, tmp_path):
 def test_visual_failure_is_explicit_partial_result(monkeypatch, tmp_path):
     monkeypatch.setattr(document_processor, "TEMP_ROOT", tmp_path)
     monkeypatch.setattr(
-        review_orchestrator, "run_chat", lambda prompt: "Content works."
+        review_pipeline, "run_chat", lambda prompt: "Content works."
     )
 
     def unavailable(*args, **kwargs):
         raise GeminiServiceError("GEMINI_TIMEOUT", "Visual review timed out.")
 
     monkeypatch.setattr(
-        review_orchestrator, "review_resume_visually", unavailable
+        review_pipeline, "review_resume_visually", unavailable
     )
     response = client.post(
         "/api/analyze-resume",
@@ -91,7 +91,7 @@ def test_visual_failure_is_explicit_partial_result(monkeypatch, tmp_path):
 def test_visual_only_endpoint_and_invalid_upload(monkeypatch, tmp_path):
     monkeypatch.setattr(document_processor, "TEMP_ROOT", tmp_path)
     monkeypatch.setattr(
-        review_orchestrator,
+        review_pipeline,
         "review_resume_visually",
         lambda image_paths, layout: VisualReviewResult(
             visual_score=80,

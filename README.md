@@ -32,12 +32,12 @@ Configure at least:
 OPENAI_API_KEY=your_openai_api_key_here
 MODEL_NAME=gpt-4o-mini
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_VISION_MODEL=gemini-3.6-flash
+GEMINI_VISION_MODEL=gemini-1.5-flash
 GEMINI_TIMEOUT_SECONDS=60
 ```
 
 `GEMINI_VISION_MODEL` is configurable, but the production default is the
-stable `gemini-3.6-flash` model.
+stable `gemini-1.5-flash` model.
 
 ## Document conversion
 

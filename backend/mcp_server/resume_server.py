@@ -19,14 +19,16 @@ from services.document_processor import (
     decode_resume_file,
     normalize_file_type,
 )
-from services.review_orchestrator import (
+from services.review_pipeline import (
     analyze_layout_bytes,
     analyze_layout_file,
     analyze_resume_bytes,
     analyze_resume_file,
     analyze_visual_bytes,
     analyze_visual_file,
+    load_resume_file,
 )
+from workflows.resume_workflow import run_resume_review_workflow
 
 # Initialize FastMCP server
 mcp = FastMCP("resume-review-server")
@@ -239,6 +241,71 @@ def review_resume_unified_base64(
         file_bytes = decode_resume_file(file_base64)
         return analyze_resume_bytes(
             file_bytes, normalized_type, job_description
+        ).model_dump(mode="json")
+    except DocumentProcessingError as exc:
+        return _processing_error(exc)
+
+
+@mcp.tool()
+def run_resume_review_workflow_tool(
+    file_path: str,
+    job_description: str = "",
+    user_instructions: str = "",
+) -> dict:
+    """Run the complete LangGraph resume review workflow from a local file.
+    
+    This tool uses the LangGraph orchestrator with Resume Review Agent,
+    GPT-5.6 Luna synthesis, and deterministic fallback.
+    
+    Args:
+        file_path: Local path to a PDF, DOCX, JPG, JPEG, or PNG resume
+        job_description: Optional job description for tailored review
+        user_instructions: Optional user-specific instructions
+        
+    Returns:
+        Complete workflow response with synthesis and structured findings
+    """
+    try:
+        file_bytes, file_type = load_resume_file(file_path)
+        return run_resume_review_workflow(
+            file_bytes=file_bytes,
+            file_type=file_type,
+            job_description=job_description,
+            user_instructions=user_instructions,
+        ).model_dump(mode="json")
+    except DocumentProcessingError as exc:
+        return _processing_error(exc)
+
+
+@mcp.tool()
+def run_resume_review_workflow_base64(
+    file_base64: str,
+    file_type: str,
+    job_description: str = "",
+    user_instructions: str = "",
+) -> dict:
+    """Run the complete LangGraph resume review workflow from base64 input.
+    
+    This tool uses the LangGraph orchestrator with Resume Review Agent,
+    GPT-5.6 Luna synthesis, and deterministic fallback.
+    
+    Args:
+        file_base64: Base64-encoded resume bytes
+        file_type: PDF, DOCX, JPG, JPEG, or PNG extension
+        job_description: Optional job description for tailored review
+        user_instructions: Optional user-specific instructions
+        
+    Returns:
+        Complete workflow response with synthesis and structured findings
+    """
+    try:
+        normalized_type = normalize_file_type(file_type)
+        file_bytes = decode_resume_file(file_base64)
+        return run_resume_review_workflow(
+            file_bytes=file_bytes,
+            file_type=normalized_type,
+            job_description=job_description,
+            user_instructions=user_instructions,
         ).model_dump(mode="json")
     except DocumentProcessingError as exc:
         return _processing_error(exc)

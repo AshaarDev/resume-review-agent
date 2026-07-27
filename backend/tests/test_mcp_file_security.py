@@ -6,7 +6,7 @@ import pytest
 
 from core.config import settings
 from services.document_processor import DocumentProcessingError
-from services.review_orchestrator import load_resume_file
+from services.review_pipeline import load_resume_file
 
 
 def test_mcp_file_inside_approved_root_is_allowed(monkeypatch, tmp_path: Path):
