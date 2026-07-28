@@ -17,6 +17,7 @@ RUN apt-get update \
         texlive-latex-base \
         texlive-latex-extra \
         texlive-latex-recommended \
+        texlive-plain-generic \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
