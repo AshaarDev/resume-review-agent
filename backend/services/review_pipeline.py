@@ -1,4 +1,4 @@
-"""Shared resume-review workflow used by FastAPI and MCP tools."""
+"""Shared review pipeline used by compatibility endpoints and workflow agents."""
 
 import logging
 import time
@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from core.config import settings
+from core.policy_schemas import ContentPolicyAnalysis, ResumeQualityPolicy
 from core.review_schemas import (
     ContentReviewResponse,
     LayoutAnalysisResponse,
@@ -23,16 +24,23 @@ from services.document_processor import (
 )
 from services.gemini_service import GeminiServiceError
 from services.layout_analyzer import analyze_layout
-from services.openai_service import run_chat
+from services.openai_service import run_structured_chat
+from services.policy_prompt_builder import build_content_policy_prompt
+from services.resume_policy import get_resume_quality_policy
 from services.resume_parser import ResumeParser
-from services.visual_reviewer import review_resume_visually
+from services.visual_reviewer import (
+    exclude_blank_document_pages,
+    review_resume_visually,
+)
 
 logger = logging.getLogger(__name__)
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 def content_review(
-    source_path: Path, job_description: str = ""
+    source_path: Path,
+    job_description: str = "",
+    policy: ResumeQualityPolicy | None = None,
 ) -> ContentReviewResponse:
     """Extract text and run the independent GPT content review."""
 
@@ -45,16 +53,22 @@ def content_review(
         )
 
     resume_text = parsed_data["text"]
-    prompt = f"Please review this resume and provide detailed feedback:\n\n{resume_text}"
+    prompt = f"Resume text:\n\n{resume_text}"
     if job_description:
         prompt += (
-            f"\n\nJob Description:\n{job_description}\n\n"
-            "Please tailor your feedback to this job description."
+            f"\n\nTarget job description:\n{job_description}"
         )
     try:
+        active_policy = policy or get_resume_quality_policy()
+        analysis = run_structured_chat(
+            build_content_policy_prompt(active_policy),
+            prompt,
+            ContentPolicyAnalysis,
+        )
         return ContentReviewResponse(
             status=ReviewStatus.AVAILABLE,
-            response=run_chat(prompt),
+            response=_format_content_feedback(analysis),
+            analysis=analysis,
         )
     except Exception:
         logger.exception("OpenAI content review failed")
@@ -63,6 +77,35 @@ def content_review(
             error_code="CONTENT_REVIEW_FAILED",
             error_message="The content review service is unavailable.",
         )
+
+
+def _format_content_feedback(analysis: ContentPolicyAnalysis) -> str:
+    lines = ["## Content review", "", analysis.overall_feedback]
+    if analysis.strengths:
+        lines.extend(["", "### Strengths"])
+        lines.extend(f"- {strength}" for strength in analysis.strengths)
+    if analysis.recommendations:
+        lines.extend(["", "### Recommendations"])
+        lines.extend(
+            f"- {recommendation}"
+            for recommendation in analysis.recommendations[:5]
+        )
+    weak_bullets = [
+        bullet
+        for bullet in analysis.bullets
+        if not (
+            bullet.has_accomplishment
+            and bullet.has_measurement
+            and bullet.has_method
+        )
+    ]
+    if weak_bullets:
+        lines.extend(["", "### XYZ improvement examples"])
+        for bullet in weak_bullets[:5]:
+            lines.append(f"- Current: {bullet.bullet_text}")
+            if bullet.suggested_rewrite:
+                lines.append(f"  - Suggested: {bullet.suggested_rewrite}")
+    return "\n".join(lines)
 
 
 def unavailable_visual(
@@ -85,7 +128,10 @@ def unavailable_layout(code: str, message: str) -> LayoutAnalysisResponse:
 
 
 def run_visual_branches(
-    source_path: Path, file_type: str, workspace_path: Path
+    source_path: Path,
+    file_type: str,
+    workspace_path: Path,
+    policy: ResumeQualityPolicy | None = None,
 ) -> Tuple[VisualReviewResponse, LayoutAnalysisResponse, Optional[PreparedDocument]]:
     """Prepare once, then run deterministic layout and Gemini vision reviews."""
 
@@ -106,11 +152,16 @@ def run_visual_branches(
         layout = unavailable_layout(exc.code, str(exc))
 
     try:
-        result = review_resume_visually(prepared.page_image_paths, layout)
+        review_paths, review_layout = exclude_blank_document_pages(
+            prepared.page_image_paths,
+            layout,
+            text_metrics_available=prepared.pdf_path is not None,
+        )
+        result = review_resume_visually(review_paths, review_layout, policy)
         visual = VisualReviewResponse(
             status=ReviewStatus.AVAILABLE,
             result=result,
-            page_count=prepared.page_count,
+            page_count=len(review_paths),
         )
     except GeminiServiceError as exc:
         visual = unavailable_visual(
@@ -126,6 +177,43 @@ def run_visual_branches(
     return visual, layout, prepared
 
 
+def run_review_pipeline(
+    source_path: Path,
+    file_type: str,
+    job_description: str,
+    workspace_path: Path,
+    policy: ResumeQualityPolicy | None = None,
+    *,
+    file_size_bytes: Optional[int] = None,
+) -> UnifiedResumeReviewResponse:
+    """Run all review branches inside a caller-owned request workspace."""
+
+    started_at = time.perf_counter()
+    normalized_type = normalize_file_type(file_type)
+    active_policy = policy or get_resume_quality_policy()
+    content = content_review(source_path, job_description, active_policy)
+    visual, layout, prepared = run_visual_branches(
+        source_path, normalized_type, workspace_path, active_policy
+    )
+    return UnifiedResumeReviewResponse(
+        content_review=content,
+        visual_review=visual,
+        layout_analysis=layout,
+        metadata={
+            "file_type": normalized_type,
+            "file_size_bytes": (
+                file_size_bytes
+                if file_size_bytes is not None
+                else source_path.stat().st_size
+            ),
+            "page_count": prepared.page_count if prepared else None,
+            "processing_time_ms": round(
+                (time.perf_counter() - started_at) * 1000, 2
+            ),
+        },
+    )
+
+
 def analyze_resume_bytes(
     file_bytes: bytes,
     file_type: str,
@@ -133,27 +221,16 @@ def analyze_resume_bytes(
 ) -> UnifiedResumeReviewResponse:
     """Run the complete workflow while one context owns all temporary files."""
 
-    started_at = time.perf_counter()
     normalized_type = normalize_file_type(file_type)
     validate_resume_bytes(file_bytes)
     with resume_workspace() as workspace:
         source_path = workspace.save_upload(file_bytes, normalized_type)
-        content = content_review(source_path, job_description)
-        visual, layout, prepared = run_visual_branches(
-            source_path, normalized_type, workspace.path
-        )
-        response = UnifiedResumeReviewResponse(
-            content_review=content,
-            visual_review=visual,
-            layout_analysis=layout,
-            metadata={
-                "file_type": normalized_type,
-                "file_size_bytes": len(file_bytes),
-                "page_count": prepared.page_count if prepared else None,
-                "processing_time_ms": round(
-                    (time.perf_counter() - started_at) * 1000, 2
-                ),
-            },
+        response = run_review_pipeline(
+            source_path,
+            normalized_type,
+            job_description,
+            workspace.path,
+            file_size_bytes=len(file_bytes),
         )
     return response
 

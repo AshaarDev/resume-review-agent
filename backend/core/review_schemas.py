@@ -5,6 +5,11 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from core.policy_schemas import (
+    ContentPolicyAnalysis,
+    MetricEmphasisAnalysis,
+)
+
 
 class ReviewStatus(str, Enum):
     """Availability of an independently executed review."""
@@ -35,6 +40,8 @@ class VisualIssueCode(str, Enum):
     BULLET_ALIGNMENT = "BULLET_ALIGNMENT"
     DATE_ALIGNMENT = "DATE_ALIGNMENT"
     MULTI_PAGE_INCONSISTENCY = "MULTI_PAGE_INCONSISTENCY"
+    UNBOLDED_KEY_METRICS = "UNBOLDED_KEY_METRICS"
+    OVEREMPHASIZED_METRICS = "OVEREMPHASIZED_METRICS"
     OTHER = "OTHER"
 
 
@@ -55,6 +62,7 @@ class VisualReviewResult(BaseModel):
     pass_status: bool
     strengths: List[str]
     issues: List[VisualIssue]
+    metric_emphasis: Optional[MetricEmphasisAnalysis] = None
 
 
 class VisualReviewResponse(BaseModel):
@@ -72,6 +80,7 @@ class ContentReviewResponse(BaseModel):
 
     status: ReviewStatus
     response: Optional[str] = None
+    analysis: Optional[ContentPolicyAnalysis] = None
     error_code: Optional[str] = None
     error_message: Optional[str] = None
 

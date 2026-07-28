@@ -9,8 +9,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>📄 Resume Review Agent</h1>
-            <p>Upload your resume for AI-powered analysis and feedback</p>
+            <h1>Resume Review Agent</h1>
+            <p>Content, visual, and layout analysis coordinated in one workflow</p>
         </header>
 
         <main>
@@ -48,14 +48,20 @@
                         placeholder="Paste the job description here to get tailored feedback..."
                         rows="4"
                     ></textarea>
+                    <label for="userInstructions">Additional Instructions (Optional)</label>
+                    <textarea
+                        id="userInstructions"
+                        placeholder="For example: prioritize executive clarity or technical impact."
+                        rows="3"
+                    ></textarea>
                 </div>
 
                 <button class="btn-primary" id="analyzeBtn" disabled>
-                    Analyze Resume
+                    Review Resume
                 </button>
                 
                 <button class="btn-secondary" id="testMockBtn">
-                    🧪 Test with Mock Response
+                    Preview Workflow Result
                 </button>
             </div>
 
@@ -63,14 +69,14 @@
                 <h2>Analysis Results</h2>
                 <div class="loading" id="loading">
                     <div class="spinner"></div>
-                    <p>Analyzing your resume...</p>
+                    <p>Running the review workflow...</p>
                 </div>
                 <div class="results-content" id="resultsContent"></div>
             </div>
         </main>
 
         <footer>
-            <p>Powered by OpenAI GPT-4o-mini</p>
+            <p>GPT content review · Gemini vision · LangGraph orchestration</p>
         </footer>
     </div>
 

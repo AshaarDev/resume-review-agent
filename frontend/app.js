@@ -7,6 +7,7 @@ const fileSize = document.getElementById('fileSize');
 const removeFileBtn = document.getElementById('removeFile');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const jobDescription = document.getElementById('jobDescription');
+const userInstructions = document.getElementById('userInstructions');
 const resultsSection = document.getElementById('resultsSection');
 const loading = document.getElementById('loading');
 const resultsContent = document.getElementById('resultsContent');
@@ -225,7 +226,72 @@ With these improvements, your resume will stand out to technical recruiters and 
         }
     };
     
-    displayResults(mockResponse);
+    displayResults({
+        workflow_id: 'mock-workflow',
+        policy_id: 'resume-review',
+        policy_version: '1.0',
+        intent: 'review',
+        status: 'completed',
+        final_message: 'The resume has a strong foundation. Address the priority actions, then review it again.',
+        summary: {
+            overall_assessment: 'The resume is clear and professional, with opportunities to make achievements more measurable.',
+            top_strengths: ['Clear technical focus', 'Professional visual hierarchy'],
+            priority_actions: [
+                {
+                    priority: 1,
+                    source: 'content',
+                    issue_code: 'CONTENT_RECOMMENDATION',
+                    title: 'Quantify achievements',
+                    recommendation: 'Add measurable outcomes to the strongest experience bullets.'
+                },
+                {
+                    priority: 2,
+                    source: 'visual',
+                    issue_code: 'INCONSISTENT_ALIGNMENT',
+                    title: 'Align dates consistently',
+                    recommendation: 'Use one right-aligned date column.'
+                }
+            ],
+            next_step: 'Apply the priority changes and run the workflow again.'
+        },
+        review: {
+            status: 'completed',
+            ...mockResponse,
+            policy_id: 'resume-review',
+            policy_version: '1.0',
+            policy_findings: [
+                {
+                    code: 'LOW_XYZ_BULLET_COVERAGE',
+                    status: 'minor_issue',
+                    source: 'content_review',
+                    description: 'Achievement bullets should follow the XYZ method.',
+                    measured_value: 0.55,
+                    target_value: 0.7,
+                    evidence: ['Built internal tools for the team.'],
+                    recommendation: 'Add the result, measurement, and method used.'
+                },
+                {
+                    code: 'EXCESSIVE_PAGE_COUNT_FOR_EXPERIENCE',
+                    status: 'passed',
+                    source: 'review_agent',
+                    description: 'Page length should match experience.',
+                    measured_value: 1,
+                    target_value: 1,
+                    evidence: ['3.5 estimated years', '1 nonblank page'],
+                    recommendation: 'Keep the resume to one page.'
+                }
+            ],
+            proposed_actions: [],
+            warnings: [],
+            errors: []
+        },
+        agent_statuses: {
+            resume_review_agent: 'completed',
+            resume_creator_agent: 'not_invoked'
+        },
+        warnings: [],
+        errors: []
+    });
     
     // Scroll to results
     resultsSection.scrollIntoView({ behavior: 'smooth' });
@@ -248,13 +314,15 @@ analyzeBtn.addEventListener('click', async () => {
 
         // Prepare request data
         const requestData = {
+            intent: 'review',
             file_base64: base64Data,
             file_type: fileType,
-            job_description: jobDescription.value.trim()
+            job_description: jobDescription.value.trim(),
+            user_instructions: userInstructions.value.trim()
         };
 
         // Call API
-        const response = await fetch('http://localhost:8001/api/analyze-resume', {
+        const response = await fetch('/api/resume-workflows', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -263,7 +331,12 @@ analyzeBtn.addEventListener('click', async () => {
         });
 
         if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+            const payload = await response.json().catch(() => null);
+            const detail = payload?.detail;
+            const message = typeof detail === 'string'
+                ? detail
+                : detail?.message || `Workflow request failed (${response.status})`;
+            throw new Error(message);
         }
 
         const result = await response.json();
@@ -326,21 +399,81 @@ function renderMarkdown(text) {
         mangle: false
     });
     
-    return marked.parse(text);
+    return marked.parse(escapeHtml(text));
 }
 
-// Helper: Display results
-function displayResults(result) {
-    const escapeHtml = (value) => String(value ?? '')
+function escapeHtml(value) {
+    return String(value ?? '')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
+}
 
-    const content = result.content_review;
-    const visual = result.visual_review;
-    const layout = result.layout_analysis;
+// Helper: Display workflow and raw branch results
+function displayResults(result) {
+    const review = result.review;
+    const summary = result.summary;
+
+    if (!review) {
+        resultsContent.innerHTML = `
+            <div class="workflow-header">
+                <span class="status-badge status-${escapeHtml(result.status)}">
+                    ${escapeHtml(result.status)}
+                </span>
+            </div>
+            <div class="error">${escapeHtml(result.final_message || 'No review result was returned.')}</div>
+        `;
+        return;
+    }
+
+    const content = review.content_review;
+    const visual = review.visual_review;
+    const layout = review.layout_analysis;
+
+    const strengthsHtml = (summary?.top_strengths || [])
+        .slice(0, 3)
+        .map((strength) => `<li>${escapeHtml(strength)}</li>`)
+        .join('');
+    const actionsHtml = (summary?.priority_actions || [])
+        .slice(0, 5)
+        .map((action) => `
+            <li>
+                <span class="action-source">${escapeHtml(action.source)}</span>
+                <strong>${escapeHtml(action.title)}</strong>
+                <p>${escapeHtml(action.recommendation)}</p>
+            </li>
+        `)
+        .join('');
+    const warningsHtml = (result.warnings || [])
+        .map((warning) => `<li>${escapeHtml(warning.message)}</li>`)
+        .join('');
+    const policyFindingsHtml = (review.policy_findings || [])
+        .map((finding) => {
+            let measured = 'Not available';
+            if (finding.measured_value != null) {
+                const coverageRules = [
+                    'LOW_XYZ_BULLET_COVERAGE',
+                    'INSUFFICIENT_QUANTIFICATION',
+                    'UNBOLDED_KEY_METRICS',
+                ];
+                measured = finding.target_value != null && coverageRules.includes(finding.code)
+                    ? `${Math.round(finding.measured_value * 100)}% / ${Math.round(finding.target_value * 100)}%`
+                    : `${finding.measured_value} / ${finding.target_value}`;
+            }
+            return `
+                <article class="policy-finding policy-${escapeHtml(finding.status)}">
+                    <div>
+                        <span>${escapeHtml(finding.status).replaceAll('_', ' ')}</span>
+                        <h4>${escapeHtml(finding.description)}</h4>
+                    </div>
+                    <strong>${escapeHtml(measured)}</strong>
+                    ${finding.status !== 'passed' ? `<p>${escapeHtml(finding.recommendation)}</p>` : ''}
+                </article>
+            `;
+        })
+        .join('');
 
     // Render content review with markdown support
     const contentHtml = content.status === 'available'
@@ -376,6 +509,34 @@ function displayResults(result) {
     }
 
     resultsContent.innerHTML = `
+        <div class="workflow-header">
+            <div>
+                <p class="workflow-id">Workflow ${escapeHtml(result.workflow_id).slice(0, 8)}</p>
+                <h3>Combined assessment</h3>
+            </div>
+            <span class="status-badge status-${escapeHtml(result.status)}">
+                ${escapeHtml(result.status).replaceAll('_', ' ')}
+            </span>
+        </div>
+        <div class="summary-card">
+            <p>${escapeHtml(summary?.overall_assessment || result.final_message)}</p>
+            ${strengthsHtml ? `<h4>Top strengths</h4><ul>${strengthsHtml}</ul>` : ''}
+            ${actionsHtml ? `<h4>Priority actions</h4><ol class="priority-list">${actionsHtml}</ol>` : ''}
+            ${summary?.next_step ? `<p class="next-step"><strong>Next step:</strong> ${escapeHtml(summary.next_step)}</p>` : ''}
+        </div>
+        ${policyFindingsHtml ? `
+            <div class="policy-card">
+                <div class="policy-heading">
+                    <div>
+                        <p class="workflow-id">Resume standards</p>
+                        <h3>Policy scorecard</h3>
+                    </div>
+                    <span>v${escapeHtml(review.policy_version)}</span>
+                </div>
+                <div class="policy-grid">${policyFindingsHtml}</div>
+            </div>
+        ` : ''}
+        ${warningsHtml ? `<div class="warning-panel"><strong>Partial results</strong><ul>${warningsHtml}</ul></div>` : ''}
         <h3>Content review</h3>${contentHtml}
         <h3>Visual review</h3>${visualHtml}
         <h3>Layout analysis</h3>${layoutHtml}

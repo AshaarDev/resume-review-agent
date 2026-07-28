@@ -1,95 +1,77 @@
-"""Workflow finalization nodes."""
-
-import logging
+"""Synthesis and deterministic finalization nodes."""
 
 from core.workflow_schemas import (
     AgentStatus,
     OrchestratorSummary,
     ReviewAgentResult,
+    WorkflowMessage,
     WorkflowStatus,
 )
 from services.message_formatter import format_final_message
 from services.orchestrator_service import synthesize_review_response
 from workflows.state import ResumeWorkflowState
 
-logger = logging.getLogger(__name__)
 
-
-def synthesize_final_response(state: ResumeWorkflowState) -> ResumeWorkflowState:
-    """Call orchestrator service to synthesize final summary."""
-    
-    # Skip if review agent didn't run or failed completely
+def synthesize_final_response(state: ResumeWorkflowState) -> dict:
     if not state.get("review_result"):
-        logger.warning("No review result available for synthesis")
-        return state
-    
-    try:
-        # Parse review result
-        review_result = ReviewAgentResult.model_validate(state["review_result"])
-        
-        # Call orchestrator service (handles Luna or fallback)
-        summary = synthesize_review_response(
-            review_result=review_result,
-            job_description=state["job_description"],
-            user_instructions=state["user_instructions"],
-        )
-        
-        # Store summary in state
-        state["orchestrator_summary"] = summary.model_dump(mode="json")
-        
-    except Exception as exc:
-        logger.exception("Orchestrator synthesis failed")
-        state["warnings"].append({
-            "source": "orchestrator",
-            "code": "ORCHESTRATOR_SYNTHESIS_FAILED",
-            "message": "Final synthesis failed; using deterministic summary."
-        })
-        
-        # Create minimal fallback summary
-        state["orchestrator_summary"] = OrchestratorSummary(
-            overall_assessment="Resume review completed with limited synthesis.",
-            top_strengths=[],
-            priority_actions=[],
-            next_step="Review the detailed findings below.",
-        ).model_dump(mode="json")
-    
-    return state
+        return {}
+    review = ReviewAgentResult.model_validate(state["review_result"])
+    synthesis = synthesize_review_response(
+        review,
+        state.get("job_description", ""),
+        state.get("user_instructions", ""),
+    )
+    warnings = [
+        WorkflowMessage.model_validate(item)
+        for item in state.get("warnings", [])
+    ] + synthesis.warnings
+    return {
+        "orchestrator_summary": synthesis.summary.model_dump(mode="json"),
+        "warnings": [
+            warning.model_dump(mode="json") for warning in warnings
+        ],
+    }
 
 
-def finalize_workflow(state: ResumeWorkflowState) -> ResumeWorkflowState:
-    """Determine final workflow status and generate final message."""
-    
-    # Determine final workflow status
+def finalize_workflow(state: ResumeWorkflowState) -> dict:
     if state.get("status") == WorkflowStatus.NOT_IMPLEMENTED.value:
-        final_status = WorkflowStatus.NOT_IMPLEMENTED
-    elif not state.get("review_result"):
-        final_status = WorkflowStatus.FAILED
+        status = WorkflowStatus.NOT_IMPLEMENTED
+        return {
+            "status": status.value,
+            "final_message": (
+                "This workflow is reserved for the future Resume Creator Agent "
+                "and is not implemented yet."
+            ),
+        }
+
+    review = (
+        ReviewAgentResult.model_validate(state["review_result"])
+        if state.get("review_result")
+        else None
+    )
+    if review is None or review.status == AgentStatus.FAILED:
+        status = WorkflowStatus.FAILED
+    elif review.status == AgentStatus.PARTIAL:
+        status = WorkflowStatus.PARTIAL
     else:
-        review_result = ReviewAgentResult.model_validate(state["review_result"])
-        
-        if review_result.status == AgentStatus.COMPLETED:
-            final_status = WorkflowStatus.COMPLETED
-        elif review_result.status == AgentStatus.PARTIAL:
-            final_status = WorkflowStatus.PARTIAL
-        else:
-            final_status = WorkflowStatus.FAILED
-    
-    state["status"] = final_status.value
-    
-    # Generate final message deterministically
-    if state.get("orchestrator_summary"):
-        summary = OrchestratorSummary.model_validate(state["orchestrator_summary"])
-        warnings_list = [w.get("message", "") for w in state.get("warnings", [])]
-        
-        final_message = format_final_message(
-            summary=summary,
-            workflow_status=final_status,
-            warnings=warnings_list,
+        status = WorkflowStatus.COMPLETED
+
+    summary = (
+        OrchestratorSummary.model_validate(state["orchestrator_summary"])
+        if state.get("orchestrator_summary")
+        else OrchestratorSummary(
+            overall_assessment="The resume review could not be completed.",
+            next_step="Verify the document and try again.",
         )
-    else:
-        # Fallback message if no summary
-        final_message = "Resume review could not be completed. Please try again."
-    
-    state["final_message"] = final_message
-    
-    return state
+    )
+    return {
+        "status": status.value,
+        "final_message": format_final_message(
+            summary,
+            status,
+            [
+                WorkflowMessage.model_validate(item)
+                for item in state.get("warnings", [])
+            ],
+        ),
+    }

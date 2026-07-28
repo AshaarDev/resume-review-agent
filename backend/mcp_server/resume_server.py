@@ -28,10 +28,20 @@ from services.review_pipeline import (
     analyze_visual_file,
     load_resume_file,
 )
-from workflows.resume_workflow import run_resume_review_workflow
+from services.resume_policy import serialize_resume_quality_policy
+from workflows.resume_workflow import (
+    run_resume_review_workflow as execute_resume_review_workflow,
+)
 
 # Initialize FastMCP server
 mcp = FastMCP("resume-review-server")
+
+
+@mcp.resource("resume-policy://current")
+def get_resume_review_policy() -> str:
+    """Return the versioned policy applied by review and future creator agents."""
+
+    return serialize_resume_quality_policy()
 
 
 @mcp.tool()
@@ -45,8 +55,11 @@ def parse_resume(file_path: str) -> dict:
     Returns:
         Dictionary containing extracted text, metadata, and success status
     """
-    result = ResumeParser.parse_resume(file_path)
-    return result
+    try:
+        load_resume_file(file_path)
+        return ResumeParser.parse_resume(file_path)
+    except DocumentProcessingError as exc:
+        return _processing_error(exc)
 
 
 @mcp.tool()
@@ -98,7 +111,10 @@ def analyze_resume_from_file(file_path: str, job_description: str = "") -> str:
     Returns:
         AI-generated review and feedback
     """
-    # Parse the resume
+    try:
+        load_resume_file(file_path)
+    except DocumentProcessingError as exc:
+        return f"Error: {exc.code} - {str(exc)}"
     parsed_data = ResumeParser.parse_resume(file_path)
     
     if not parsed_data["success"]:
@@ -247,7 +263,7 @@ def review_resume_unified_base64(
 
 
 @mcp.tool()
-def run_resume_review_workflow_tool(
+def run_resume_review_workflow(
     file_path: str,
     job_description: str = "",
     user_instructions: str = "",
@@ -267,7 +283,7 @@ def run_resume_review_workflow_tool(
     """
     try:
         file_bytes, file_type = load_resume_file(file_path)
-        return run_resume_review_workflow(
+        return execute_resume_review_workflow(
             file_bytes=file_bytes,
             file_type=file_type,
             job_description=job_description,
@@ -301,7 +317,7 @@ def run_resume_review_workflow_base64(
     try:
         normalized_type = normalize_file_type(file_type)
         file_bytes = decode_resume_file(file_base64)
-        return run_resume_review_workflow(
+        return execute_resume_review_workflow(
             file_bytes=file_bytes,
             file_type=normalized_type,
             job_description=job_description,

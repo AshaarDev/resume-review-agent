@@ -98,6 +98,7 @@ def test_visual_response_never_contains_rendered_images(monkeypatch):
         "pass_status",
         "strengths",
         "issues",
+        "metric_emphasis",
     }
 
 

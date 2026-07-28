@@ -1,28 +1,25 @@
-"""Workflow schemas for LangGraph orchestration."""
+"""Shared contracts for resume workflows, agents, and synthesis."""
 
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from core.review_schemas import (
     ContentReviewResponse,
     LayoutAnalysisResponse,
     VisualReviewResponse,
 )
+from core.policy_schemas import PolicyFinding
 
 
 class WorkflowIntent(str, Enum):
-    """Supported workflow intents."""
-
     REVIEW = "review"
     CREATE = "create"
     REVISE = "revise"
 
 
 class WorkflowStatus(str, Enum):
-    """Overall workflow execution status."""
-
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -32,8 +29,6 @@ class WorkflowStatus(str, Enum):
 
 
 class AgentStatus(str, Enum):
-    """Individual agent execution status."""
-
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -42,59 +37,85 @@ class AgentStatus(str, Enum):
     NOT_INVOKED = "not_invoked"
 
 
+class WorkflowMessage(BaseModel):
+    """A safe, stable warning or error exposed by a workflow."""
+
+    code: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    source: Optional[str] = None
+
+
 class ResumeWorkflowRequest(BaseModel):
-    """Request to initiate a resume workflow."""
+    """A future-ready workflow request with review-specific file validation."""
 
     intent: WorkflowIntent = WorkflowIntent.REVIEW
-    file_base64: str = Field(..., description="Base64 encoded resume file")
-    file_type: str = Field(..., description="File extension (pdf, docx, jpg, png, etc.)")
-    job_description: str = Field(default="", description="Optional job description")
-    user_instructions: str = Field(default="", description="Optional user instructions")
+    file_base64: Optional[str] = None
+    file_type: Optional[str] = None
+    job_description: str = ""
+    user_instructions: str = ""
+
+    @model_validator(mode="after")
+    def require_review_document(self) -> "ResumeWorkflowRequest":
+        if self.intent == WorkflowIntent.REVIEW:
+            if not self.file_base64 or not self.file_type:
+                raise ValueError(
+                    "file_base64 and file_type are required for review workflows"
+                )
+        return self
 
 
 class PriorityAction(BaseModel):
-    """A prioritized action extracted from review findings."""
+    """A normalized action that can later be consumed by the Creator Agent."""
 
-    priority: int = Field(ge=1, description="Priority level (1=highest)")
-    source: str = Field(description="Source: content, visual, or layout")
-    issue_code: Optional[str] = Field(default=None, description="Stable issue code if applicable")
-    title: str = Field(min_length=1, description="Action title")
-    recommendation: str = Field(min_length=1, description="Specific recommendation")
+    priority: int = Field(ge=1)
+    source: str
+    issue_code: Optional[str] = None
+    title: str = Field(min_length=1)
+    recommendation: str = Field(min_length=1)
 
 
 class ReviewAgentResult(BaseModel):
-    """Structured result from the Resume Review Agent."""
+    """Raw branch results plus normalized, prioritized review actions."""
 
     status: AgentStatus
     content_review: ContentReviewResponse
     visual_review: VisualReviewResponse
     layout_analysis: LayoutAnalysisResponse
+    policy_id: str
+    policy_version: str
+    policy_findings: list[PolicyFinding] = Field(default_factory=list)
     proposed_actions: list[PriorityAction] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    errors: list[str] = Field(default_factory=list)
+    warnings: list[WorkflowMessage] = Field(default_factory=list)
+    errors: list[WorkflowMessage] = Field(default_factory=list)
 
 
 class OrchestratorSummary(BaseModel):
-    """Final synthesis from the orchestrator model."""
+    """Validated synthesis used to build the final user-facing message."""
 
     overall_assessment: str = Field(min_length=1)
-    top_strengths: list[str] = Field(default_factory=list, max_length=3)
-    priority_actions: list[PriorityAction] = Field(default_factory=list, max_length=5)
+    top_strengths: list[str] = Field(default_factory=list)
+    priority_actions: list[PriorityAction] = Field(default_factory=list)
     next_step: str = Field(min_length=1)
 
 
+class OrchestratorSynthesisResult(BaseModel):
+    """Synthesis plus explicit metadata about deterministic fallback."""
+
+    summary: OrchestratorSummary
+    warnings: list[WorkflowMessage] = Field(default_factory=list)
+
+
 class ResumeWorkflowResponse(BaseModel):
-    """Complete workflow response returned to API or MCP client."""
+    """Public workflow response; temporary artifacts are intentionally absent."""
 
     workflow_id: str
+    policy_id: Optional[str] = None
+    policy_version: Optional[str] = None
     intent: WorkflowIntent
     status: WorkflowStatus
-
     final_message: str
-    summary: OrchestratorSummary
-
-    review: ReviewAgentResult
+    summary: Optional[OrchestratorSummary] = None
+    review: Optional[ReviewAgentResult] = None
     agent_statuses: dict[str, AgentStatus]
-
-    warnings: list[str] = Field(default_factory=list)
-    errors: list[str] = Field(default_factory=list)
+    warnings: list[WorkflowMessage] = Field(default_factory=list)
+    errors: list[WorkflowMessage] = Field(default_factory=list)

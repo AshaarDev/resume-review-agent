@@ -1,13 +1,15 @@
 """OpenAI integration for chat completions."""
 
-from typing import Optional
+from typing import Optional, Type, TypeVar
 import httpx
 from openai import OpenAI
+from pydantic import BaseModel
 
 from core.config import settings
 
 
 _client: Optional[OpenAI] = None
+StructuredResponseT = TypeVar("StructuredResponseT", bound=BaseModel)
 
 
 def get_client() -> OpenAI:
@@ -39,3 +41,24 @@ def run_chat(message: str) -> str:
     )
 
     return response.choices[0].message.content or "I was unable to generate a response."
+
+
+def run_structured_chat(
+    system_prompt: str,
+    message: str,
+    response_format: Type[StructuredResponseT],
+) -> StructuredResponseT:
+    """Run a structured content-analysis request."""
+
+    response = get_client().beta.chat.completions.parse(
+        model=settings.MODEL_NAME,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message},
+        ],
+        response_format=response_format,
+    )
+    parsed = response.choices[0].message.parsed
+    if parsed is None:
+        raise ValueError("The content model returned no structured analysis")
+    return parsed

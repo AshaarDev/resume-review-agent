@@ -1,28 +1,34 @@
-"""Resume Review Agent with deterministic layout analysis and action prioritization."""
+"""Resume Review Agent: domain normalization over the existing review pipeline."""
 
 import logging
+import re
 from pathlib import Path
 from statistics import median
-from typing import Optional
 
-from core.review_schemas import (
-    ReviewStatus,
-    UnifiedResumeReviewResponse,
-    VisualIssueSeverity,
+from core.policy_schemas import (
+    PolicyFinding,
+    PolicyFindingStatus,
+    ResumeQualityPolicy,
 )
-from core.workflow_schemas import AgentStatus, PriorityAction, ReviewAgentResult
-from services.review_pipeline import analyze_resume_bytes
+from core.review_schemas import ReviewStatus, VisualIssueSeverity
+from core.workflow_schemas import (
+    AgentStatus,
+    PriorityAction,
+    ReviewAgentResult,
+    WorkflowMessage,
+)
+from services.review_pipeline import run_review_pipeline
+from services.policy_evaluator import evaluate_resume_policy
+from services.resume_policy import get_resume_quality_policy
 
 logger = logging.getLogger(__name__)
 
-# Layout thresholds - tested heuristics, not environment variables
 SMALL_BODY_FONT_PT = 9.5
 VERY_SMALL_FONT_PT = 8.0
 HIGH_TEXT_DENSITY = 0.60
 LOW_TEXT_DENSITY = 0.10
 PAGE_DIMENSION_VARIANCE = 0.03
 
-# Action caps to control latency and cost
 MAX_CONTENT_ACTIONS = 5
 MAX_LAYOUT_ACTIONS = 5
 MAX_MINOR_VISUAL_ISSUES_FOR_SYNTHESIS = 5
@@ -31,7 +37,7 @@ MAX_SUMMARY_PRIORITY_ACTIONS = 5
 
 
 class ResumeReviewAgent:
-    """Agent that wraps the existing review pipeline and generates prioritized actions."""
+    """Run the review capability and normalize its findings for orchestration."""
 
     def run(
         self,
@@ -40,263 +46,331 @@ class ResumeReviewAgent:
         job_description: str,
         user_instructions: str,
         workspace_path: Path,
+        policy: ResumeQualityPolicy | None = None,
     ) -> ReviewAgentResult:
-        """Execute the review pipeline and generate prioritized actions.
-        
-        Args:
-            source_path: Path to the uploaded resume file
-            file_type: Normalized file extension
-            job_description: Optional job description for tailored review
-            user_instructions: Optional user-specific instructions
-            workspace_path: Temporary workspace for this request
-            
-        Returns:
-            ReviewAgentResult with structured findings and prioritized actions
-        """
-        # Read the file and call the existing review pipeline
-        file_bytes = source_path.read_bytes()
-        
+        del user_instructions  # Reserved for agent-specific behavior in a later phase.
+        active_policy = policy or get_resume_quality_policy()
         try:
-            unified_review = analyze_resume_bytes(
-                file_bytes, file_type, job_description
+            review = run_review_pipeline(
+                source_path,
+                file_type,
+                job_description,
+                workspace_path,
+                active_policy,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("Review pipeline failed completely")
             return ReviewAgentResult(
                 status=AgentStatus.FAILED,
-                content_review={"status": "unavailable", "error_code": "PIPELINE_FAILED"},
-                visual_review={"status": "unavailable", "error_code": "PIPELINE_FAILED"},
-                layout_analysis={"status": "unavailable", "error_code": "PIPELINE_FAILED"},
-                proposed_actions=[],
-                warnings=[],
-                errors=[f"Review pipeline failed: {str(exc)}"],
+                content_review={
+                    "status": "unavailable",
+                    "error_code": "PIPELINE_FAILED",
+                    "error_message": "The content review could not run.",
+                },
+                visual_review={
+                    "status": "unavailable",
+                    "error_code": "PIPELINE_FAILED",
+                    "error_message": "The visual review could not run.",
+                },
+                layout_analysis={
+                    "status": "unavailable",
+                    "error_code": "PIPELINE_FAILED",
+                    "error_message": "The layout analysis could not run.",
+                },
+                policy_id=active_policy.policy_id,
+                policy_version=active_policy.version,
+                errors=[
+                    WorkflowMessage(
+                        code="REVIEW_PIPELINE_FAILED",
+                        message="The resume review pipeline could not run.",
+                        source="resume_review_agent",
+                    )
+                ],
             )
 
-        # Determine agent status based on available branches
-        content_available = unified_review.content_review.status == ReviewStatus.AVAILABLE
-        visual_available = unified_review.visual_review.status == ReviewStatus.AVAILABLE
-        layout_available = unified_review.layout_analysis.status == ReviewStatus.AVAILABLE
+        branches = (
+            review.content_review,
+            review.visual_review,
+            review.layout_analysis,
+        )
+        available_count = sum(
+            branch.status == ReviewStatus.AVAILABLE for branch in branches
+        )
+        status = (
+            AgentStatus.COMPLETED
+            if available_count == 3
+            else AgentStatus.PARTIAL
+            if available_count
+            else AgentStatus.FAILED
+        )
 
-        if content_available and visual_available and layout_available:
-            agent_status = AgentStatus.COMPLETED
-        elif content_available or visual_available or layout_available:
-            agent_status = AgentStatus.PARTIAL
-        else:
-            agent_status = AgentStatus.FAILED
-
-        # Generate deterministic layout actions
-        layout_actions = self._generate_layout_actions(unified_review)
-
-        # Extract visual issues as priority actions
-        visual_actions = self._extract_visual_actions(unified_review)
-
-        # Extract content actions (best effort parsing)
-        content_actions = self._extract_content_actions(unified_review)
-
-        # Combine and sort all actions
-        all_actions = layout_actions + visual_actions + content_actions
-        all_actions.sort(key=lambda a: (a.priority, a.source))
-
-        # Collect warnings
-        warnings = []
-        if unified_review.content_review.status == ReviewStatus.UNAVAILABLE:
-            warnings.append(
-                f"Content review unavailable: {unified_review.content_review.error_message}"
+        indexed_actions: list[tuple[int, PriorityAction]] = []
+        policy_findings = evaluate_resume_policy(
+            active_policy,
+            review.content_review,
+            review.visual_review,
+            review.layout_analysis,
+            file_type,
+        )
+        for action in self._policy_actions(policy_findings):
+            indexed_actions.append((len(indexed_actions), action))
+        for action in self._visual_actions(review.visual_review):
+            indexed_actions.append((len(indexed_actions), action))
+        for action in self._layout_actions(review.layout_analysis, file_type):
+            indexed_actions.append((len(indexed_actions), action))
+        for action in self._content_actions(review.content_review):
+            indexed_actions.append((len(indexed_actions), action))
+        indexed_actions.sort(
+            key=lambda item: (
+                item[1].priority,
+                item[1].source,
+                item[0],
             )
-        if unified_review.visual_review.status == ReviewStatus.UNAVAILABLE:
-            warnings.append(
-                f"Visual review unavailable: {unified_review.visual_review.error_message}"
-            )
-        if unified_review.layout_analysis.status == ReviewStatus.UNAVAILABLE:
-            warnings.append(
-                f"Layout analysis unavailable: {unified_review.layout_analysis.error_message}"
-            )
+        )
+
+        warnings: list[WorkflowMessage] = []
+        for source, branch in (
+            ("content_review", review.content_review),
+            ("visual_review", review.visual_review),
+            ("layout_analysis", review.layout_analysis),
+        ):
+            if branch.status == ReviewStatus.UNAVAILABLE:
+                warnings.append(
+                    WorkflowMessage(
+                        code=branch.error_code or "REVIEW_BRANCH_UNAVAILABLE",
+                        message=branch.error_message
+                        or f"The {source.replace('_', ' ')} is unavailable.",
+                        source=source,
+                    )
+                )
+        for finding in policy_findings:
+            if finding.status == PolicyFindingStatus.UNAVAILABLE:
+                warnings.append(
+                    WorkflowMessage(
+                        code=f"{finding.code}_UNAVAILABLE",
+                        message=finding.recommendation,
+                        source=finding.source,
+                    )
+                )
 
         return ReviewAgentResult(
-            status=agent_status,
-            content_review=unified_review.content_review,
-            visual_review=unified_review.visual_review,
-            layout_analysis=unified_review.layout_analysis,
-            proposed_actions=all_actions,
+            status=status,
+            content_review=review.content_review,
+            visual_review=review.visual_review,
+            layout_analysis=review.layout_analysis,
+            policy_id=active_policy.policy_id,
+            policy_version=active_policy.version,
+            policy_findings=policy_findings,
+            proposed_actions=[item[1] for item in indexed_actions],
             warnings=warnings,
-            errors=[],
         )
 
-    def _generate_layout_actions(
-        self, review: UnifiedResumeReviewResponse
+    @staticmethod
+    def _policy_actions(
+        findings: list[PolicyFinding],
     ) -> list[PriorityAction]:
-        """Generate deterministic layout actions from metrics."""
-        if review.layout_analysis.status != ReviewStatus.AVAILABLE:
-            return []
-
-        layout = review.layout_analysis
         actions = []
+        for finding in findings:
+            if finding.status not in {
+                PolicyFindingStatus.MAJOR_ISSUE,
+                PolicyFindingStatus.MINOR_ISSUE,
+            }:
+                continue
+            actions.append(
+                PriorityAction(
+                    priority=(
+                        1
+                        if finding.status == PolicyFindingStatus.MAJOR_ISSUE
+                        else 2
+                    ),
+                    source="policy",
+                    issue_code=finding.code,
+                    title=finding.description,
+                    recommendation=finding.recommendation,
+                )
+            )
+        return actions
 
-        # Skip font/density checks for image-only resumes
-        is_image_only = all(
-            page.text_density == 0.0 for page in layout.pages
+    @staticmethod
+    def _visual_actions(visual_review) -> list[PriorityAction]:
+        if (
+            visual_review.status != ReviewStatus.AVAILABLE
+            or visual_review.result is None
+        ):
+            return []
+        priority_by_severity = {
+            VisualIssueSeverity.CRITICAL: 1,
+            VisualIssueSeverity.MAJOR: 2,
+            VisualIssueSeverity.MINOR: 3,
+        }
+        major_actions: list[PriorityAction] = []
+        minor_actions: list[PriorityAction] = []
+        for issue in visual_review.result.issues:
+            action = PriorityAction(
+                priority=priority_by_severity[issue.severity],
+                source="visual",
+                issue_code=issue.code.value,
+                title=issue.description,
+                recommendation=issue.recommendation,
+            )
+            (
+                minor_actions
+                if issue.severity == VisualIssueSeverity.MINOR
+                else major_actions
+            ).append(action)
+        return major_actions + minor_actions[:MAX_MINOR_VISUAL_ISSUES_FOR_SYNTHESIS]
+
+    @staticmethod
+    def _content_actions(content_review) -> list[PriorityAction]:
+        if (
+            content_review.status != ReviewStatus.AVAILABLE
+            or not content_review.response
+        ):
+            return []
+        candidates: list[str] = []
+        for raw_line in content_review.response.splitlines():
+            line = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", raw_line).strip()
+            lowered = line.lower()
+            if len(line) >= 12 and (
+                raw_line.lstrip().startswith(("-", "*", "•"))
+                or re.match(r"^\s*\d+[.)]", raw_line)
+                or any(
+                    marker in lowered
+                    for marker in ("recommend", "should", "improve", "consider")
+                )
+            ):
+                candidates.append(line)
+            if len(candidates) == MAX_CONTENT_ACTIONS:
+                break
+        return [
+            PriorityAction(
+                priority=2,
+                source="content",
+                issue_code="CONTENT_RECOMMENDATION",
+                title=line[:120],
+                recommendation=line,
+            )
+            for line in candidates
+        ]
+
+    @staticmethod
+    def _layout_actions(layout, file_type: str) -> list[PriorityAction]:
+        if layout.status != ReviewStatus.AVAILABLE or not layout.pages:
+            return []
+        actions: list[PriorityAction] = []
+        is_image = file_type.lower().lstrip(".") in {"jpg", "jpeg", "png"}
+        reviewable_pages = (
+            layout.pages
+            if is_image
+            else [
+                page
+                for page in layout.pages
+                if page.font_sizes or page.text_density > 0.001
+            ]
         )
-
-        if not is_image_only and layout.pages:
-            # Check for small fonts
-            small_font_pages = []
-            very_small_pages = []
-
-            for page in layout.pages:
-                if page.median_font_size and page.median_font_size < SMALL_BODY_FONT_PT:
-                    small_font_pages.append(page.page_number)
-                if page.dominant_font_size and page.dominant_font_size < SMALL_BODY_FONT_PT:
-                    if page.page_number not in small_font_pages:
-                        small_font_pages.append(page.page_number)
-                if page.min_font_size and page.min_font_size < VERY_SMALL_FONT_PT:
-                    very_small_pages.append(page.page_number)
-
-            # Deduplicate small font findings into one action
-            if small_font_pages:
-                pages_str = ", ".join(f"page {p}" for p in sorted(small_font_pages))
-                actions.append(
-                    PriorityAction(
-                        priority=2,
-                        source="layout",
-                        issue_code="SMALL_FONT",
-                        title="Small body text detected",
-                        recommendation=f"Increase font size to at least {SMALL_BODY_FONT_PT}pt on {pages_str}",
+        if not reviewable_pages:
+            return []
+        if not is_image:
+            small_pages = sorted(
+                {
+                    page.page_number
+                    for page in reviewable_pages
+                    if (
+                        page.median_font_size is not None
+                        and page.median_font_size < SMALL_BODY_FONT_PT
                     )
-                )
-
-            if very_small_pages:
-                pages_str = ", ".join(f"page {p}" for p in sorted(very_small_pages))
-                actions.append(
-                    PriorityAction(
-                        priority=1,
-                        source="layout",
-                        issue_code="VERY_SMALL_FONT",
-                        title="Very small text detected",
-                        recommendation=f"Text below {VERY_SMALL_FONT_PT}pt is difficult to read on {pages_str}",
+                    or (
+                        page.dominant_font_size is not None
+                        and page.dominant_font_size < SMALL_BODY_FONT_PT
                     )
-                )
-
-            # Check text density
-            for page in layout.pages:
-                if page.text_density > HIGH_TEXT_DENSITY:
+                }
+            )
+            very_small_pages = sorted(
+                page.page_number
+                for page in reviewable_pages
+                if page.min_font_size is not None
+                and page.min_font_size < VERY_SMALL_FONT_PT
+            )
+            high_density_pages = sorted(
+                page.page_number
+                for page in reviewable_pages
+                if page.text_density > HIGH_TEXT_DENSITY
+            )
+            low_density_pages = sorted(
+                page.page_number
+                for page in reviewable_pages
+                if page.font_sizes and page.text_density < LOW_TEXT_DENSITY
+            )
+            page_sets = (
+                (
+                    small_pages,
+                    "SMALL_BODY_FONT",
+                    "Body text may be too small",
+                    "Increase the dominant body font to at least 9.5 pt.",
+                ),
+                (
+                    very_small_pages,
+                    "VERY_SMALL_TEXT",
+                    "Some text is extremely small",
+                    "Increase text below 8 pt or remove nonessential fine print.",
+                ),
+                (
+                    high_density_pages,
+                    "HIGH_TEXT_DENSITY",
+                    "Page content is visually dense",
+                    "Reduce or redistribute content and add breathing room.",
+                ),
+                (
+                    low_density_pages,
+                    "LOW_TEXT_DENSITY",
+                    "Page has unusually low text density",
+                    "Rebalance content and whitespace across the page.",
+                ),
+            )
+            for pages, code, title, recommendation in page_sets:
+                if pages:
                     actions.append(
                         PriorityAction(
                             priority=2,
                             source="layout",
-                            issue_code="HIGH_DENSITY",
-                            title=f"Page {page.page_number} is crowded",
-                            recommendation=f"Reduce text density from {page.text_density:.1%} to improve readability",
-                        )
-                    )
-                elif page.text_density < LOW_TEXT_DENSITY:
-                    actions.append(
-                        PriorityAction(
-                            priority=3,
-                            source="layout",
-                            issue_code="LOW_DENSITY",
-                            title=f"Page {page.page_number} has sparse content",
-                            recommendation="Consider consolidating content or using space more effectively",
+                            issue_code=code,
+                            title=title,
+                            recommendation=(
+                                f"{recommendation} Affected pages: "
+                                + ", ".join(map(str, pages))
+                                + "."
+                            ),
                         )
                     )
 
-        # Check for inconsistent page dimensions
-        if len(layout.pages) > 1:
-            widths = [p.width_points for p in layout.pages]
-            heights = [p.height_points for p in layout.pages]
-            median_width = median(widths)
-            median_height = median(heights)
-
-            inconsistent_pages = []
-            for page in layout.pages:
-                width_variance = abs(page.width_points - median_width) / median_width
-                height_variance = abs(page.height_points - median_height) / median_height
-                if width_variance > PAGE_DIMENSION_VARIANCE or height_variance > PAGE_DIMENSION_VARIANCE:
-                    inconsistent_pages.append(page.page_number)
-
-            if inconsistent_pages:
-                pages_str = ", ".join(f"page {p}" for p in inconsistent_pages)
+        if len(reviewable_pages) > 1:
+            median_width = median(
+                page.width_points for page in reviewable_pages
+            )
+            median_height = median(
+                page.height_points for page in reviewable_pages
+            )
+            inconsistent = [
+                page.page_number
+                for page in reviewable_pages
+                if abs(page.width_points - median_width) / median_width
+                > PAGE_DIMENSION_VARIANCE
+                or abs(page.height_points - median_height) / median_height
+                > PAGE_DIMENSION_VARIANCE
+            ]
+            if inconsistent:
                 actions.append(
                     PriorityAction(
                         priority=2,
                         source="layout",
-                        issue_code="INCONSISTENT_DIMENSIONS",
-                        title="Inconsistent page dimensions",
-                        recommendation=f"Standardize page size across {pages_str}",
+                        issue_code="INCONSISTENT_PAGE_DIMENSIONS",
+                        title="Page dimensions are inconsistent",
+                        recommendation=(
+                            "Use one page size and orientation throughout. "
+                            "Affected pages: "
+                            + ", ".join(map(str, inconsistent))
+                            + "."
+                        ),
                     )
                 )
-
-        # Cap layout actions
         return actions[:MAX_LAYOUT_ACTIONS]
-
-    def _extract_visual_actions(
-        self, review: UnifiedResumeReviewResponse
-    ) -> list[PriorityAction]:
-        """Convert visual issues to priority actions."""
-        if review.visual_review.status != ReviewStatus.AVAILABLE:
-            return []
-        if not review.visual_review.result:
-            return []
-
-        actions = []
-        for issue in review.visual_review.result.issues:
-            # Map severity to priority
-            if issue.severity == VisualIssueSeverity.CRITICAL:
-                priority = 1
-            elif issue.severity == VisualIssueSeverity.MAJOR:
-                priority = 2
-            else:  # MINOR
-                priority = 3
-
-            actions.append(
-                PriorityAction(
-                    priority=priority,
-                    source="visual",
-                    issue_code=issue.code.value,
-                    title=issue.description,
-                    recommendation=issue.recommendation,
-                )
-            )
-
-        return actions
-
-    def _extract_content_actions(
-        self, review: UnifiedResumeReviewResponse
-    ) -> list[PriorityAction]:
-        """Extract actionable items from content review (best effort)."""
-        if review.content_review.status != ReviewStatus.AVAILABLE:
-            return []
-        if not review.content_review.response:
-            return []
-
-        # Best-effort parsing of GPT content review
-        # This is a simple heuristic - could be improved with structured output
-        actions = []
-        response_text = review.content_review.response
-
-        # Look for common action indicators
-        lines = response_text.split("\n")
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Simple heuristic: lines starting with bullet points or numbers
-            # that contain action words
-            action_indicators = ["consider", "add", "remove", "improve", "update", "revise", "include"]
-            if any(indicator in line.lower() for indicator in action_indicators):
-                # Extract a reasonable title (first 80 chars)
-                title = line[:80] + "..." if len(line) > 80 else line
-                actions.append(
-                    PriorityAction(
-                        priority=2,  # Content actions are medium priority
-                        source="content",
-                        issue_code=None,
-                        title=title,
-                        recommendation=line,
-                    )
-                )
-
-            if len(actions) >= MAX_CONTENT_ACTIONS:
-                break
-
-        return actions[:MAX_CONTENT_ACTIONS]

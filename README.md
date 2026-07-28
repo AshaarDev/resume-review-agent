@@ -10,6 +10,33 @@ The unified API returns partial results when one AI provider is unavailable. A
 Gemini timeout or missing key, for example, does not discard a successful text
 review or layout analysis.
 
+The application also exposes a LangGraph workflow layer. It routes review
+requests through a Resume Review Agent, preserves the three raw review
+branches, uses GPT-5.6 Luna to synthesize their findings, and falls back to a
+deterministic summary when synthesis is unavailable. Create and revise intents
+are reserved for the future Resume Creator Agent.
+
+## Resume quality policy
+
+`backend/policies/resume-review-policy-v1.json` is the single source of truth
+for the standards shared by the workflow:
+
+- Achievement bullets follow the XYZ method semantically: accomplishment,
+  meaningful measurement, and method.
+- At least 60% of eligible achievement bullets should be meaningfully
+  quantified.
+- Candidates below five years of relevant experience should use no more than
+  one nonblank content page; candidates at or above five years may use two.
+- Important achievement metrics should be emphasized selectively in bold.
+
+The policy is validated as Pydantic data, given an ID and version, and routed
+to the appropriate review branch. GPT performs the content and experience
+analysis, Gemini checks visible metric emphasis, and the Review Agent applies
+the configured thresholds deterministically. The workflow response includes
+the policy ID, version, and a finding for each rule. A future Resume Creator
+Agent can consume the same findings and policy without copying prompt text or
+redefining standards.
+
 ## Setup
 
 Create and activate a virtual environment, then install the backend packages:
@@ -31,13 +58,17 @@ Configure at least:
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
 MODEL_NAME=gpt-4o-mini
+ORCHESTRATOR_MODEL=gpt-5.6-luna
+ORCHESTRATOR_REASONING_EFFORT=low
+ORCHESTRATOR_TIMEOUT_SECONDS=60
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_VISION_MODEL=gemini-1.5-flash
+GEMINI_VISION_MODEL=gemini-3.6-flash
 GEMINI_TIMEOUT_SECONDS=60
 ```
 
 `GEMINI_VISION_MODEL` is configurable, but the production default is the
-stable `gemini-1.5-flash` model.
+account-verified `gemini-3.6-flash` model. `MODEL_NAME` remains the content
+review model; `ORCHESTRATOR_MODEL` is used only for final synthesis.
 
 ## Document conversion
 
@@ -154,6 +185,36 @@ An unavailable branch is explicit and never uses a fake score:
 Runs only document preparation, deterministic layout analysis, and the Gemini
 visual review. It is intended for visual-review testing and troubleshooting.
 
+### `POST /api/resume-workflows`
+
+Runs the LangGraph workflow:
+
+```json
+{
+  "intent": "review",
+  "file_base64": "base64 document data",
+  "file_type": "pdf",
+  "job_description": "Optional job description",
+  "user_instructions": "Optional synthesis context"
+}
+```
+
+The response includes workflow and agent statuses, the complete raw review,
+normalized actions, structured synthesis, and a deterministic final message.
+It never contains temporary paths, documents, images, or Base64.
+It also includes `policy_id`, `policy_version`, and `review.policy_findings`,
+which power the frontend Resume Standards scorecard.
+
+`create` and `revise` are accepted without an upload and currently return
+`not_implemented`; these routes are reserved for the future Resume Creator
+Agent. The graph is compiled once at module load. No checkpointing is enabled
+because workflow state currently refers to temporary request artifacts.
+
+When Luna is unavailable or returns invalid structured output, the raw review
+is preserved and deterministic synthesis is returned with an
+`ORCHESTRATOR_MODEL_UNAVAILABLE` warning. Luna is skipped when all review
+branches fail.
+
 ### Other endpoints
 
 - `GET /api/health`
@@ -180,6 +241,8 @@ The review server exposes:
 - `review_resume_visual_base64` — Gemini visual review from base64
 - `review_resume_unified` — content, visual, and layout review from a file
 - `review_resume_unified_base64` — unified review from base64
+- `run_resume_review_workflow` — workflow review from an approved local file
+- `run_resume_review_workflow_base64` — workflow review from Base64
 - `get_resume_statistics` — basic text statistics
 
 The layout, visual, and unified tools call the same orchestration service as
@@ -188,7 +251,7 @@ temporary workspaces, schema validation, stable issue codes, and partial
 failure behavior. File-path tools are appropriate when the MCP client and
 server share a filesystem; base64 variants support remote clients.
 
-Path-based MCP tools resolve the submitted path and accept it only when it is
+All path-based MCP tools resolve the submitted path and accept it only when it is
 inside one of the comma-separated `MCP_ALLOWED_FILE_ROOTS`. Relative roots are
 resolved from `backend/`; the default is `backend/uploads/`.
 Parent-directory traversal and resolved paths outside these roots are rejected.
@@ -200,6 +263,11 @@ Base64 is accepted only as tool input. Visual and unified tool responses
 contain structured review findings and page metadata, not rendered images or
 image Base64.
 
+The same canonical policy is exposed read-only as the MCP resource
+`resume-policy://current`. This resource is a view of the backend policy, not a
+second copy. MCP clients and the future Creator Agent can inspect the exact
+version used by the review workflow.
+
 ## Tests
 
 ```powershell
@@ -209,16 +277,34 @@ image Base64.
 The suite covers workspace cleanup, upload and page limits, PDF rendering,
 layout metrics, Google GenAI structured-response validation, timeout handling,
 visual-review orchestration, unified partial results, the visual-only API, and
-MCP tool registration and structured results.
+MCP tool/resource registration and structured results. Policy tests cover
+model-specific prompt injection, XYZ and quantification coverage, experience
+page tiers, blank-page exclusion, visible metric emphasis, and explicit
+unavailable findings. Workflow tests mock external
+providers and cover routing, synthesis fallback, deterministic layout actions,
+workspace isolation, path security, and response leakage.
+
+An optional real-provider smoke test is skipped unless explicitly enabled:
+
+```powershell
+$env:RUN_MANUAL_TESTS="1"
+.\venv\Scripts\python.exe -m pytest backend\tests\manual_smoke_test.py -v -s
+```
 
 ## Structure
 
 ```text
 backend/
+  agents/
+    resume_review_agent.py
   core/
     config.py
     models.py
+    policy_schemas.py
     review_schemas.py
+    workflow_schemas.py
+  policies/
+    resume-review-policy-v1.json
   data/reference/
     text/good/
     text/bad/
@@ -229,10 +315,22 @@ backend/
     document_processor.py
     gemini_service.py
     layout_analyzer.py
+    message_formatter.py
     openai_service.py
-    review_orchestrator.py
+    orchestrator_service.py
+    policy_evaluator.py
+    policy_prompt_builder.py
+    review_pipeline.py
+    resume_policy.py
     resume_parser.py
     visual_reviewer.py
+  workflows/
+    nodes/
+      finalization_nodes.py
+      review_nodes.py
+    resume_workflow.py
+    routing.py
+    state.py
   tests/
   temp/                  # runtime only; ignored by Git
   uploads/               # approved staging area for path-based MCP tools

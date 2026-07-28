@@ -1,0 +1,46 @@
+{
+  "policy_id": "resume-review",
+  "version": "1.0",
+  "name": "Resume Quality Policy",
+  "rules": [
+    {
+      "code": "LOW_XYZ_BULLET_COVERAGE",
+      "category": "content",
+      "description": "Eligible experience and project bullets should communicate an accomplishment, measurable evidence, and the method used.",
+      "evaluator": "gpt_content",
+      "target": 0.7,
+      "major_below": 0.4,
+      "guidance": "Apply the XYZ method semantically: accomplished X, as measured by Y, by doing Z. Do not require that literal wording or order."
+    },
+    {
+      "code": "INSUFFICIENT_QUANTIFICATION",
+      "category": "content",
+      "description": "Eligible achievement bullets should contain meaningful measurable evidence.",
+      "evaluator": "gpt_content",
+      "target": 0.6,
+      "major_below": 0.3,
+      "guidance": "Count percentages, money, time saved, team size, user volume, performance, reliability, or scale. Do not count dates, phone numbers, software versions, or section numbering."
+    },
+    {
+      "code": "EXCESSIVE_PAGE_COUNT_FOR_EXPERIENCE",
+      "category": "cross_branch",
+      "description": "Candidates below five years of relevant experience should use at most one nonblank content page; candidates with five or more years may use two.",
+      "evaluator": "review_agent",
+      "experience_threshold_years": 5,
+      "max_pages_below_threshold": 1,
+      "max_pages_at_or_above_threshold": 2,
+      "minimum_experience_confidence": 0.6,
+      "guidance": "Count only nonblank pages and do not double-count overlapping professional roles."
+    },
+    {
+      "code": "UNBOLDED_KEY_METRICS",
+      "category": "visual",
+      "description": "Meaningful achievement metrics should receive selective visual emphasis.",
+      "evaluator": "gemini_visual",
+      "target": 0.7,
+      "major_below": 0.3,
+      "minimum_analysis_confidence": 0.5,
+      "guidance": "Evaluate meaningful achievement metrics, not dates, phone numbers, software versions, or every number indiscriminately."
+    }
+  ]
+}

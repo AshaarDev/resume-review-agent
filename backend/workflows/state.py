@@ -1,35 +1,26 @@
-"""Workflow state definition for LangGraph."""
+"""Internal LangGraph state; no checkpointer is used while paths are temporary."""
 
 from typing import Literal, TypedDict
 
 
-class ResumeWorkflowState(TypedDict):
-    """State passed through the LangGraph workflow.
-    
-    Note: This state contains temporary file paths and cannot be persisted
-    until we implement durable artifact storage. Checkpointing is disabled
-    for this phase.
-    """
-
+class ResumeWorkflowState(TypedDict, total=False):
     workflow_id: str
+    policy: dict
+    policy_id: str
+    policy_version: str
     intent: Literal["review", "create", "revise"]
     status: str
-
-    # Temporary paths - not suitable for persistence
     source_path: str
+    workspace_path: str
     file_type: str
     job_description: str
     user_instructions: str
-
-    # Agent results
     review_result: dict | None
-    creation_result: dict | None  # Reserved for future Creator Agent
-    comparison_result: dict | None  # Reserved for future revision workflows
-
-    # Execution tracking
+    creation_result: dict | None
+    comparison_result: dict | None
+    orchestrator_summary: dict | None
     agent_statuses: dict[str, str]
     warnings: list[dict]
     errors: list[dict]
-
-    # Final output
+    final_message: str
     final_response: dict | None

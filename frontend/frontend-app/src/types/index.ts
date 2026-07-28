@@ -1,28 +1,65 @@
-export interface AnalysisRequest {
+export type ReviewStatus = 'available' | 'unavailable';
+export type WorkflowStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'not_implemented';
+export type AgentStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'not_invoked';
+
+export interface WorkflowRequest {
+  intent: 'review';
   file_base64: string;
   file_type: string;
   job_description?: string;
+  user_instructions?: string;
 }
 
-export interface AnalysisResponse {
-  content_review: ContentReview;
-  visual_review: VisualReview;
-  layout_analysis: LayoutAnalysis;
-  metadata: {
-    file_type: string;
-    file_size_bytes: number;
-    page_count: number | null;
-    processing_time_ms: number;
-  };
+export interface WorkflowMessage {
+  code: string;
+  message: string;
+  source: string | null;
 }
 
-export type ReviewStatus = 'available' | 'unavailable';
+export interface PriorityAction {
+  priority: number;
+  source: string;
+  issue_code: string | null;
+  title: string;
+  recommendation: string;
+}
 
 export interface ContentReview {
   status: ReviewStatus;
   response: string | null;
+  analysis: ContentPolicyAnalysis | null;
   error_code: string | null;
   error_message: string | null;
+}
+
+export interface BulletPolicyAnalysis {
+  bullet_text: string;
+  has_accomplishment: boolean;
+  has_measurement: boolean;
+  has_method: boolean;
+  has_meaningful_metric: boolean;
+  suggested_rewrite: string | null;
+}
+
+export interface ContentPolicyAnalysis {
+  overall_feedback: string;
+  strengths: string[];
+  recommendations: string[];
+  estimated_relevant_experience_years: number | null;
+  experience_estimate_confidence: number;
+  bullets: BulletPolicyAnalysis[];
 }
 
 export interface VisualIssue {
@@ -38,6 +75,13 @@ export interface VisualReviewResult {
   pass_status: boolean;
   strengths: string[];
   issues: VisualIssue[];
+  metric_emphasis: {
+    eligible_metric_count: number;
+    emphasized_metric_count: number;
+    coverage: number | null;
+    confidence: number;
+    unbolded_metrics: string[];
+  } | null;
 }
 
 export interface VisualReview {
@@ -68,6 +112,47 @@ export interface LayoutAnalysis {
   error_message: string | null;
 }
 
-export interface ApiError {
-  detail: string;
+export interface ReviewAgentResult {
+  status: AgentStatus;
+  content_review: ContentReview;
+  visual_review: VisualReview;
+  layout_analysis: LayoutAnalysis;
+  policy_id: string;
+  policy_version: string;
+  policy_findings: PolicyFinding[];
+  proposed_actions: PriorityAction[];
+  warnings: WorkflowMessage[];
+  errors: WorkflowMessage[];
+}
+
+export interface PolicyFinding {
+  code: string;
+  status: 'passed' | 'minor_issue' | 'major_issue' | 'unavailable';
+  source: string;
+  description: string;
+  measured_value: number | null;
+  target_value: number | null;
+  evidence: string[];
+  recommendation: string;
+}
+
+export interface OrchestratorSummary {
+  overall_assessment: string;
+  top_strengths: string[];
+  priority_actions: PriorityAction[];
+  next_step: string;
+}
+
+export interface WorkflowResponse {
+  workflow_id: string;
+  policy_id: string | null;
+  policy_version: string | null;
+  intent: 'review' | 'create' | 'revise';
+  status: WorkflowStatus;
+  final_message: string;
+  summary: OrchestratorSummary | null;
+  review: ReviewAgentResult | null;
+  agent_statuses: Record<string, AgentStatus>;
+  warnings: WorkflowMessage[];
+  errors: WorkflowMessage[];
 }

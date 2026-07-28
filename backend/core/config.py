@@ -13,7 +13,7 @@ class Settings:
     MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4o-mini")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_VISION_MODEL: str = os.getenv(
-        "GEMINI_VISION_MODEL", "gemini-1.5-flash"
+        "GEMINI_VISION_MODEL", "gemini-3.6-flash"
     )
     GEMINI_TIMEOUT_SECONDS: int = int(
         os.getenv("GEMINI_TIMEOUT_SECONDS", "60")

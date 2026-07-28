@@ -7,11 +7,22 @@ import fitz
 from fastapi.testclient import TestClient
 
 from core.review_schemas import VisualReviewResult
+from core.policy_schemas import ContentPolicyAnalysis
 from main import app
 from services import document_processor, review_pipeline
 from services.gemini_service import GeminiServiceError
 
 client = TestClient(app)
+
+
+def _content_analysis() -> ContentPolicyAnalysis:
+    return ContentPolicyAnalysis(
+        overall_feedback="Strong content.",
+        strengths=["Relevant experience"],
+        estimated_relevant_experience_years=3,
+        experience_estimate_confidence=0.9,
+        bullets=[],
+    )
 
 
 def _pdf_base64() -> str:
@@ -26,12 +37,14 @@ def _pdf_base64() -> str:
 def test_unified_endpoint_returns_all_review_branches(monkeypatch, tmp_path):
     monkeypatch.setattr(document_processor, "TEMP_ROOT", tmp_path)
     monkeypatch.setattr(
-        review_pipeline, "run_chat", lambda prompt: "Strong content."
+        review_pipeline,
+        "run_structured_chat",
+        lambda *args, **kwargs: _content_analysis(),
     )
     monkeypatch.setattr(
         review_pipeline,
         "review_resume_visually",
-        lambda image_paths, layout: VisualReviewResult(
+        lambda *args, **kwargs: VisualReviewResult(
             visual_score=91,
             pass_status=True,
             strengths=["Balanced layout"],
@@ -61,7 +74,9 @@ def test_unified_endpoint_returns_all_review_branches(monkeypatch, tmp_path):
 def test_visual_failure_is_explicit_partial_result(monkeypatch, tmp_path):
     monkeypatch.setattr(document_processor, "TEMP_ROOT", tmp_path)
     monkeypatch.setattr(
-        review_pipeline, "run_chat", lambda prompt: "Content works."
+        review_pipeline,
+        "run_structured_chat",
+        lambda *args, **kwargs: _content_analysis(),
     )
 
     def unavailable(*args, **kwargs):
@@ -93,7 +108,7 @@ def test_visual_only_endpoint_and_invalid_upload(monkeypatch, tmp_path):
     monkeypatch.setattr(
         review_pipeline,
         "review_resume_visually",
-        lambda image_paths, layout: VisualReviewResult(
+        lambda *args, **kwargs: VisualReviewResult(
             visual_score=80,
             pass_status=True,
             strengths=[],

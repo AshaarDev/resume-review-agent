@@ -22,7 +22,7 @@ from services.review_pipeline import (
     analyze_resume_bytes,
     analyze_visual_bytes,
 )
-from workflows.resume_workflow import run_resume_review_workflow
+from workflows.resume_workflow import run_resume_workflow
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -100,11 +100,17 @@ def create_resume_workflow(request: ResumeWorkflowRequest) -> ResumeWorkflowResp
     It provides GPT-5.6 Luna synthesis with deterministic fallback.
     """
     try:
+        if request.intent.value != "review":
+            return run_resume_workflow(
+                intent=request.intent,
+                job_description=request.job_description,
+                user_instructions=request.user_instructions,
+            )
         file_bytes, file_type = _decode_request(
-            request.file_base64, request.file_type
+            request.file_base64 or "", request.file_type or ""
         )
-        
-        return run_resume_review_workflow(
+        return run_resume_workflow(
+            intent=request.intent,
             file_bytes=file_bytes,
             file_type=file_type,
             job_description=request.job_description,
@@ -116,5 +122,5 @@ def create_resume_workflow(request: ResumeWorkflowRequest) -> ResumeWorkflowResp
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Workflow execution failed: {str(exc)}",
+            detail="The workflow could not be started. Please try again.",
         ) from exc

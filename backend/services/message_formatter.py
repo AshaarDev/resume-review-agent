@@ -1,12 +1,16 @@
 """Deterministic final message formatter - no model calls."""
 
-from core.workflow_schemas import OrchestratorSummary, WorkflowStatus
+from core.workflow_schemas import (
+    OrchestratorSummary,
+    WorkflowMessage,
+    WorkflowStatus,
+)
 
 
 def format_final_message(
     summary: OrchestratorSummary,
     workflow_status: WorkflowStatus,
-    warnings: list[str],
+    warnings: list[WorkflowMessage],
 ) -> str:
     """Generate user-facing final message from orchestrator summary.
     
@@ -22,7 +26,7 @@ def format_final_message(
         Formatted final message string
     """
     
-    # Handle complete failure
+    del warnings  # Technical details intentionally stay out of user-facing text.
     if workflow_status == WorkflowStatus.FAILED:
         return (
             "We were unable to complete your resume review. "
