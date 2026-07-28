@@ -1,4 +1,4 @@
-"""Resume Review Agent - FastAPI Application."""
+"""Resume Intelligence Agents - FastAPI application."""
 
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from routes.api import router as api_router
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 
-app = FastAPI(title="Resume Review Agent")
+app = FastAPI(title="Resume Intelligence Agents")
 
 app.add_middleware(
     CORSMiddleware,

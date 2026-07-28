@@ -3,18 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resume Review Agent</title>
+    <title>Resume Intelligence Agents</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Resume Review Agent</h1>
-            <p>Content, visual, and layout analysis coordinated in one workflow</p>
+            <h1>Resume Intelligence Agents</h1>
+            <p>Review an existing resume or create a factual LaTeX draft</p>
         </header>
 
         <main>
             <div class="upload-section">
+                <div class="workflow-tabs">
+                    <button id="reviewModeBtn" class="active" type="button">Review resume</button>
+                    <button id="createModeBtn" type="button">Create resume</button>
+                </div>
+                <div id="reviewInput">
                 <div class="upload-box" id="uploadBox">
                     <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -39,6 +44,25 @@
                         </div>
                     </div>
                     <button class="btn-remove" id="removeFile">Remove</button>
+                </div>
+                </div>
+
+                <div class="creator-form" id="creatorInput" style="display: none;">
+                    <h2>Factual resume intake</h2>
+                    <div class="creator-grid">
+                        <label>Full name *<input id="creatorName" autocomplete="name"></label>
+                        <label>Target role<input id="creatorTargetRole"></label>
+                        <label>Email<input id="creatorEmail" type="email" autocomplete="email"></label>
+                        <label>Phone<input id="creatorPhone" autocomplete="tel"></label>
+                        <label>Location<input id="creatorLocation"></label>
+                    </div>
+                    <label>Profile links, one per line
+                        <textarea id="creatorLinks" rows="3" placeholder="https://linkedin.com/in/..."></textarea>
+                    </label>
+                    <label>Verified career, project, education, and skill facts *
+                        <textarea id="creatorFacts" rows="10" placeholder="One fact per line. Include employers, roles, dates, and known outcomes."></textarea>
+                    </label>
+                    <p class="field-note">Only enter facts you can verify. The agent cites these facts for every generated claim.</p>
                 </div>
 
                 <div class="job-description-section">
@@ -76,7 +100,7 @@
         </main>
 
         <footer>
-            <p>GPT content review · Gemini vision · LangGraph orchestration</p>
+            <p>GPT content review | Gemini vision | Luna creation | LangGraph workflow</p>
         </footer>
     </div>
 

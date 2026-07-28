@@ -13,7 +13,9 @@ def route_by_intent(state: ResumeWorkflowState) -> str:
     
     if intent == "review":
         return "run_review_agent"
-    elif intent in ("create", "revise"):
+    elif intent == "create":
+        return "run_creator_agent"
+    elif intent == "revise":
         return "not_implemented"
     else:
         # Default to not_implemented for unknown intents

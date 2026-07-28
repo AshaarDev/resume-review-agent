@@ -16,16 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 def validate_intent(state: ResumeWorkflowState) -> dict:
-    review_status = (
-        AgentStatus.PENDING
-        if state["intent"] == "review"
-        else AgentStatus.NOT_INVOKED
-    )
+    review_status = AgentStatus.PENDING if state["intent"] == "review" else AgentStatus.NOT_INVOKED
+    creator_status = AgentStatus.PENDING if state["intent"] == "create" else AgentStatus.NOT_INVOKED
     return {
         "status": WorkflowStatus.RUNNING.value,
         "agent_statuses": {
             "resume_review_agent": review_status.value,
-            "resume_creator_agent": AgentStatus.NOT_INVOKED.value,
+            "resume_creator_agent": creator_status.value,
         },
         "warnings": [],
         "errors": [],

@@ -1,6 +1,7 @@
 """API routes for independent and unified resume reviews."""
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
 from core.models import (
     ChatRequest,
@@ -23,6 +24,7 @@ from services.review_pipeline import (
     analyze_visual_bytes,
 )
 from workflows.resume_workflow import run_resume_workflow
+from services.artifact_store import resolve_artifact
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -94,17 +96,14 @@ def analyze_resume_visual(request: VisualReviewRequest) -> VisualReviewResponse:
     response_model=ResumeWorkflowResponse,
 )
 def create_resume_workflow(request: ResumeWorkflowRequest) -> ResumeWorkflowResponse:
-    """Execute a resume workflow with LangGraph orchestration.
-    
-    This endpoint uses the LangGraph workflow orchestrator with the Resume Review Agent.
-    It provides GPT-5.6 Luna synthesis with deterministic fallback.
-    """
+    """Route review and creation requests through the shared LangGraph."""
     try:
         if request.intent.value != "review":
             return run_resume_workflow(
                 intent=request.intent,
                 job_description=request.job_description,
                 user_instructions=request.user_instructions,
+                creation_brief=request.creation_brief,
             )
         file_bytes, file_type = _decode_request(
             request.file_base64 or "", request.file_type or ""
@@ -124,3 +123,20 @@ def create_resume_workflow(request: ResumeWorkflowRequest) -> ResumeWorkflowResp
             status_code=500,
             detail="The workflow could not be started. Please try again.",
         ) from exc
+
+
+@router.get("/artifacts/{artifact_id}/{filename}")
+def download_resume_artifact(
+    artifact_id: str, filename: str
+) -> FileResponse:
+    """Download only a generated resume.tex or resume.pdf artifact."""
+
+    path = resolve_artifact(artifact_id, filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    media_type = (
+        "application/pdf"
+        if path.suffix == ".pdf"
+        else "application/x-tex"
+    )
+    return FileResponse(path, media_type=media_type, filename=filename)

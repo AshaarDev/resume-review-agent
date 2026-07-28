@@ -1,20 +1,20 @@
-# Resume Review Agent
+# Resume Intelligence Agents
 
-A FastAPI and React resume reviewer with three independent analysis branches:
+A FastAPI, React, MCP, and LangGraph application with two routed capabilities:
 
-- GPT-4o mini content feedback
-- Gemini 3.6 Flash visual review
-- Deterministic PDF layout measurements
+- Resume Review Agent: GPT-4o mini content feedback, Gemini Flash visual
+  review, and deterministic PDF layout measurements.
+- Resume Creator Agent: GPT-5.6 Luna structured content generation followed
+  by safe deterministic rendering into the approved Harshibar LaTeX template.
 
 The unified API returns partial results when one AI provider is unavailable. A
 Gemini timeout or missing key, for example, does not discard a successful text
 review or layout analysis.
 
-The application also exposes a LangGraph workflow layer. It routes review
-requests through a Resume Review Agent, preserves the three raw review
-branches, uses GPT-5.6 Luna to synthesize their findings, and falls back to a
-deterministic summary when synthesis is unavailable. Create and revise intents
-are reserved for the future Resume Creator Agent.
+The precompiled LangGraph routes each request by intent. Review requests use
+the Resume Review Agent and Luna synthesis. Create requests use the Resume
+Creator Agent and do not invoke the review models. The `revise` route remains
+reserved for the future closed-loop workflow that will combine both agents.
 
 ## Resume quality policy
 
@@ -61,6 +61,11 @@ MODEL_NAME=gpt-4o-mini
 ORCHESTRATOR_MODEL=gpt-5.6-luna
 ORCHESTRATOR_REASONING_EFFORT=low
 ORCHESTRATOR_TIMEOUT_SECONDS=60
+CREATOR_MODEL=gpt-5.6-luna
+CREATOR_REASONING_EFFORT=none
+CREATOR_TIMEOUT_SECONDS=60
+LATEX_COMPILE_TIMEOUT_SECONDS=30
+CREATOR_ARTIFACT_TTL_HOURS=24
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_VISION_MODEL=gemini-3.6-flash
 GEMINI_TIMEOUT_SECONDS=60
@@ -68,7 +73,11 @@ GEMINI_TIMEOUT_SECONDS=60
 
 `GEMINI_VISION_MODEL` is configurable, but the production default is the
 account-verified `gemini-3.6-flash` model. `MODEL_NAME` remains the content
-review model; `ORCHESTRATOR_MODEL` is used only for final synthesis.
+review model; `ORCHESTRATOR_MODEL` is used only for final review synthesis;
+and `CREATOR_MODEL` is isolated from both so its model can change independently.
+
+PDF generation requires `pdflatex` on the backend host. Without it, creation
+still succeeds partially and returns a downloadable `.tex` source artifact.
 
 ## Document conversion
 
@@ -205,10 +214,39 @@ It never contains temporary paths, documents, images, or Base64.
 It also includes `policy_id`, `policy_version`, and `review.policy_findings`,
 which power the frontend Resume Standards scorecard.
 
-`create` and `revise` are accepted without an upload and currently return
-`not_implemented`; these routes are reserved for the future Resume Creator
-Agent. The graph is compiled once at module load. No checkpointing is enabled
-because workflow state currently refers to temporary request artifacts.
+Create requests use a factual brief rather than an uploaded document:
+
+```json
+{
+  "intent": "create",
+  "creation_brief": {
+    "full_name": "Ada Lovelace",
+    "email": "ada@example.com",
+    "target_role": "Software Engineer",
+    "links": ["https://linkedin.com/in/ada"],
+    "source_facts": [
+      {
+        "fact_id": "fact-1",
+        "text": "Reduced processing time by 40% by adding Redis caching."
+      }
+    ]
+  },
+  "job_description": "Optional target job",
+  "user_instructions": "Optional preferences"
+}
+```
+
+Every model-generated claim cites one or more `source_facts`. The Creator
+Agent validates those references, escapes content, renders only through
+`backend/templates/resumes/harshibar/template.tex`, compiles with shell escape
+disabled, and stores an expiring artifact. The response provides the claim
+ledger, missing-information prompts, compilation status, and download URLs.
+Generated resumes always require user fact review.
+
+`revise` still returns `not_implemented`; it is the reserved route for the
+future Review Agent → Creator Agent → Review Agent loop. The graph is compiled
+once at module load. No checkpointing is enabled because workflow state
+currently refers to temporary request artifacts.
 
 When Luna is unavailable or returns invalid structured output, the raw review
 is preserved and deterministic synthesis is returned with an
@@ -218,9 +256,11 @@ branches fail.
 ### Other endpoints
 
 - `GET /api/health`
+- `GET /api/artifacts/{artifact_id}/resume.tex`
+- `GET /api/artifacts/{artifact_id}/resume.pdf`
 - `POST /api/chat`
 
-## MCP review tools
+## MCP tools and policy resource
 
 Run the MCP server from the backend directory:
 
@@ -243,6 +283,7 @@ The review server exposes:
 - `review_resume_unified_base64` — unified review from base64
 - `run_resume_review_workflow` — workflow review from an approved local file
 - `run_resume_review_workflow_base64` — workflow review from Base64
+- `create_resume` — source-grounded resume creation through the shared workflow
 - `get_resume_statistics` — basic text statistics
 
 The layout, visual, and unified tools call the same orchestration service as
@@ -263,10 +304,11 @@ Base64 is accepted only as tool input. Visual and unified tool responses
 contain structured review findings and page metadata, not rendered images or
 image Base64.
 
-The same canonical policy is exposed read-only as the MCP resource
+The Creator tool accepts structured facts and returns download URLs; it never
+returns raw images or internal workspace paths. The same canonical policy is
+exposed read-only as the MCP resource
 `resume-policy://current`. This resource is a view of the backend policy, not a
-second copy. MCP clients and the future Creator Agent can inspect the exact
-version used by the review workflow.
+second copy. MCP clients can inspect the exact version used by both agents.
 
 ## Tests
 
@@ -282,7 +324,9 @@ model-specific prompt injection, XYZ and quantification coverage, experience
 page tiers, blank-page exclusion, visible metric emphasis, and explicit
 unavailable findings. Workflow tests mock external
 providers and cover routing, synthesis fallback, deterministic layout actions,
-workspace isolation, path security, and response leakage.
+workspace isolation, path security, response leakage, Creator model
+configuration, fact-ID grounding, LaTeX escaping, compiler fallback, and
+artifact allowlisting.
 
 An optional real-provider smoke test is skipped unless explicitly enabled:
 
@@ -296,9 +340,11 @@ $env:RUN_MANUAL_TESTS="1"
 ```text
 backend/
   agents/
+    resume_creator_agent.py
     resume_review_agent.py
   core/
     config.py
+    creator_schemas.py
     models.py
     policy_schemas.py
     review_schemas.py
@@ -312,9 +358,13 @@ backend/
     visual/bad/
   routes/api.py
   services/
+    artifact_store.py
+    creator_service.py
     document_processor.py
     gemini_service.py
     layout_analyzer.py
+    latex_compiler.py
+    latex_renderer.py
     message_formatter.py
     openai_service.py
     orchestrator_service.py
@@ -326,12 +376,16 @@ backend/
     visual_reviewer.py
   workflows/
     nodes/
+      creator_nodes.py
       finalization_nodes.py
       review_nodes.py
     resume_workflow.py
     routing.py
     state.py
   tests/
+  artifacts/             # expiring generated artifacts; ignored by Git
+  templates/resumes/
+    harshibar/            # approved LaTeX template and metadata
   temp/                  # runtime only; ignored by Git
   uploads/               # approved staging area for path-based MCP tools
 frontend/

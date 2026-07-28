@@ -38,6 +38,79 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
+.workflow-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 6px;
+  margin-bottom: 30px;
+  background: #f1f5f9;
+  border-radius: 12px;
+}
+
+.workflow-tabs button {
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.workflow-tabs button.active {
+  background: white;
+  color: #5b5bd6;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.creator-form {
+  margin-bottom: 30px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.creator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.creator-form label {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.creator-form input,
+.creator-form textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  color: #0f172a;
+  font: inherit;
+  font-weight: 400;
+}
+
+.creator-form input:focus,
+.creator-form textarea:focus {
+  outline: 2px solid rgba(99, 102, 241, 0.2);
+  border-color: #6366f1;
+}
+
+.field-note {
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
 .upload-section,
 .job-description-section {
   margin-bottom: 30px;
@@ -153,6 +226,63 @@
   margin-top: 30px;
   padding-top: 30px;
   border-top: 2px solid #e2e8f0;
+}
+
+.creation-card {
+  margin: 20px 0;
+  padding: 24px;
+  border: 1px solid #c7d2fe;
+  border-radius: 12px;
+  background: #f5f7ff;
+}
+
+.creation-card h3 {
+  margin: 0 0 8px;
+  color: #1e293b;
+}
+
+.artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0 10px;
+}
+
+.artifact-link {
+  display: inline-flex;
+  padding: 10px 14px;
+  border: 1px solid #6366f1;
+  border-radius: 8px;
+  color: #4f46e5;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.artifact-link.primary {
+  background: #4f46e5;
+  color: white;
+}
+
+.creation-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.creation-stats span {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .creator-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .analysis-results h2 {

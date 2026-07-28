@@ -15,6 +15,7 @@ from core.workflow_schemas import (
     WorkflowMessage,
     WorkflowStatus,
 )
+from core.creator_schemas import CreatorAgentResult, ResumeCreationBrief
 from services.document_processor import (
     normalize_file_type,
     resume_workspace,
@@ -30,6 +31,7 @@ from workflows.nodes.review_nodes import (
     run_review_agent,
     validate_intent,
 )
+from workflows.nodes.creator_nodes import run_creator_agent
 from workflows.routing import route_by_intent
 from workflows.state import ResumeWorkflowState
 
@@ -40,6 +42,7 @@ def _build_workflow_graph():
     graph = StateGraph(ResumeWorkflowState)
     graph.add_node("validate_intent", validate_intent)
     graph.add_node("run_review_agent", run_review_agent)
+    graph.add_node("run_creator_agent", run_creator_agent)
     graph.add_node("not_implemented", not_implemented)
     graph.add_node("synthesize_final_response", synthesize_final_response)
     graph.add_node("finalize_workflow", finalize_workflow)
@@ -49,10 +52,12 @@ def _build_workflow_graph():
         route_by_intent,
         {
             "run_review_agent": "run_review_agent",
+            "run_creator_agent": "run_creator_agent",
             "not_implemented": "not_implemented",
         },
     )
     graph.add_edge("run_review_agent", "synthesize_final_response")
+    graph.add_edge("run_creator_agent", "finalize_workflow")
     graph.add_edge("synthesize_final_response", "finalize_workflow")
     graph.add_edge("not_implemented", "finalize_workflow")
     graph.add_edge("finalize_workflow", END)
@@ -68,13 +73,43 @@ def run_resume_workflow(
     file_type: Optional[str] = None,
     job_description: str = "",
     user_instructions: str = "",
+    creation_brief: Optional[ResumeCreationBrief] = None,
 ) -> ResumeWorkflowResponse:
     """Run an intent through the shared graph and own all temporary artifacts."""
 
     workflow_id = str(uuid.uuid4())
+    if intent == WorkflowIntent.CREATE:
+        if creation_brief is None:
+            raise ValueError("Create workflows require a creation brief")
+        with resume_workspace() as workspace:
+            state = _initial_state(
+                workflow_id,
+                intent,
+                "",
+                str(workspace.path),
+                "",
+                job_description,
+                user_instructions,
+                creation_brief,
+            )
+            try:
+                return _build_workflow_response(
+                    _compiled_workflow.invoke(state)
+                )
+            except Exception:
+                logger.exception("Resume creation workflow failed")
+                return _failed_response(workflow_id, intent)
+
     if intent != WorkflowIntent.REVIEW:
         state = _initial_state(
-            workflow_id, intent, "", "", "", job_description, user_instructions
+            workflow_id,
+            intent,
+            "",
+            "",
+            "",
+            job_description,
+            user_instructions,
+            None,
         )
         return _build_workflow_response(_compiled_workflow.invoke(state))
 
@@ -92,6 +127,7 @@ def run_resume_workflow(
             normalized_type,
             job_description,
             user_instructions,
+            None,
         )
         try:
             final_state = _compiled_workflow.invoke(state)
@@ -126,6 +162,7 @@ def _initial_state(
     file_type: str,
     job_description: str,
     user_instructions: str,
+    creation_brief: ResumeCreationBrief | None,
 ) -> ResumeWorkflowState:
     policy = get_resume_quality_policy()
     return {
@@ -140,6 +177,11 @@ def _initial_state(
         "file_type": file_type,
         "job_description": job_description,
         "user_instructions": user_instructions,
+        "creation_brief": (
+            creation_brief.model_dump(mode="json")
+            if creation_brief
+            else None
+        ),
         "review_result": None,
         "creation_result": None,
         "comparison_result": None,
@@ -169,6 +211,11 @@ def _build_workflow_response(
         review=(
             ReviewAgentResult.model_validate(state["review_result"])
             if state.get("review_result")
+            else None
+        ),
+        creation=(
+            CreatorAgentResult.model_validate(state["creation_result"])
+            if state.get("creation_result")
             else None
         ),
         agent_statuses={
@@ -204,8 +251,16 @@ def _failed_response(
         summary=None,
         review=None,
         agent_statuses={
-            "resume_review_agent": AgentStatus.FAILED,
-            "resume_creator_agent": AgentStatus.NOT_INVOKED,
+            "resume_review_agent": (
+                AgentStatus.FAILED
+                if intent == WorkflowIntent.REVIEW
+                else AgentStatus.NOT_INVOKED
+            ),
+            "resume_creator_agent": (
+                AgentStatus.FAILED
+                if intent == WorkflowIntent.CREATE
+                else AgentStatus.NOT_INVOKED
+            ),
         },
         errors=[error],
     )

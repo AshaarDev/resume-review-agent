@@ -7,6 +7,7 @@ from core.workflow_schemas import (
     WorkflowMessage,
     WorkflowStatus,
 )
+from core.creator_schemas import CreatorAgentResult
 from services.message_formatter import format_final_message
 from services.orchestrator_service import synthesize_review_response
 from workflows.state import ResumeWorkflowState
@@ -39,10 +40,29 @@ def finalize_workflow(state: ResumeWorkflowState) -> dict:
         return {
             "status": status.value,
             "final_message": (
-                "This workflow is reserved for the future Resume Creator Agent "
-                "and is not implemented yet."
+                "Resume revision is reserved for the future review-and-revise "
+                "workflow and is not implemented yet."
             ),
         }
+
+    if state.get("creation_result"):
+        creation = CreatorAgentResult.model_validate(
+            state["creation_result"]
+        )
+        status = WorkflowStatus(creation.status)
+        if creation.artifact:
+            message = (
+                "Your resume draft was created with the Harshibar LaTeX "
+                f"template. Compilation status: "
+                f"{creation.artifact.compilation_status.value.replace('_', ' ')}. "
+                "Review every claim before using or submitting it."
+            )
+        else:
+            message = (
+                "The Resume Creator Agent could not produce an artifact. "
+                "Review the reported errors and try again."
+            )
+        return {"status": status.value, "final_message": message}
 
     review = (
         ReviewAgentResult.model_validate(state["review_result"])

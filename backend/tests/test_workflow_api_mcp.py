@@ -15,6 +15,7 @@ from core.workflow_schemas import (
 from main import app
 from mcp_server import resume_server
 from routes import api
+from services import artifact_store
 
 client = TestClient(app)
 
@@ -66,18 +67,43 @@ def test_create_intent_does_not_require_upload(monkeypatch):
 
     monkeypatch.setattr(api, "run_resume_workflow", fake)
     response = client.post(
-        "/api/resume-workflows", json={"intent": "create"}
+        "/api/resume-workflows",
+        json={
+            "intent": "create",
+            "creation_brief": {
+                "full_name": "Ada Lovelace",
+                "source_facts": [
+                    {"fact_id": "fact-1", "text": "Built an engine."}
+                ],
+            },
+        },
     )
     assert response.status_code == 200
     assert "file_bytes" not in captured
 
 
-def test_all_thirteen_mcp_tools_are_unique():
+def test_artifact_download_is_allowlisted(monkeypatch, tmp_path):
+    artifact_id = "a" * 32
+    artifact_dir = tmp_path / artifact_id
+    artifact_dir.mkdir()
+    (artifact_dir / "resume.tex").write_text("safe", encoding="utf-8")
+    monkeypatch.setattr(artifact_store, "ARTIFACT_ROOT", tmp_path)
+
+    response = client.get(f"/api/artifacts/{artifact_id}/resume.tex")
+    blocked = client.get(f"/api/artifacts/{artifact_id}/../secret.txt")
+
+    assert response.status_code == 200
+    assert response.text == "safe"
+    assert blocked.status_code == 404
+
+
+def test_all_fourteen_mcp_tools_are_unique():
     tools = asyncio.run(resume_server.mcp.list_tools())
     names = [tool.name for tool in tools]
-    assert len(names) == len(set(names)) == 13
+    assert len(names) == len(set(names)) == 14
     assert "run_resume_review_workflow" in names
     assert "run_resume_review_workflow_base64" in names
+    assert "create_resume" in names
 
 
 def test_current_resume_policy_is_exposed_as_an_mcp_resource():

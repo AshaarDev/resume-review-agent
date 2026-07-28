@@ -1,0 +1,10 @@
+{
+  "template_id": "harshibar",
+  "version": "1.0",
+  "name": "Harshibar ATS Resume",
+  "license": "MIT",
+  "source": "https://github.com/jakeryang/resume",
+  "paper_size": "letter",
+  "default_font_size_pt": 11,
+  "layout": "single-column"
+}

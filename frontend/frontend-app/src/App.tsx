@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { FileUpload } from './components/FileUpload';
-import { analyzeResume } from './services/api';
+import {
+  analyzeResume,
+  artifactUrl,
+  createResume,
+} from './services/api';
 import type { WorkflowResponse } from './types';
 import './App.css';
 
@@ -114,6 +118,7 @@ const mockWorkflow: WorkflowResponse = {
     warnings: [],
     errors: [],
   },
+  creation: null,
   agent_statuses: {
     resume_review_agent: 'partial',
     resume_creator_agent: 'not_invoked',
@@ -129,12 +134,20 @@ const mockWorkflow: WorkflowResponse = {
 };
 
 function App() {
+  const [mode, setMode] = useState<'review' | 'create'>('review');
   const [file, setFile] = useState<File | null>(null);
   const [jobDescription, setJobDescription] = useState('');
   const [userInstructions, setUserInstructions] = useState('');
   const [workflow, setWorkflow] = useState<WorkflowResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [creatorName, setCreatorName] = useState('');
+  const [creatorEmail, setCreatorEmail] = useState('');
+  const [creatorPhone, setCreatorPhone] = useState('');
+  const [creatorLocation, setCreatorLocation] = useState('');
+  const [creatorLinks, setCreatorLinks] = useState('');
+  const [creatorTargetRole, setCreatorTargetRole] = useState('');
+  const [creatorFacts, setCreatorFacts] = useState('');
 
   const handleAnalyze = async () => {
     if (!file) {
@@ -159,30 +172,176 @@ function App() {
     }
   };
 
+  const handleCreate = async () => {
+    const facts = creatorFacts
+      .split('\n')
+      .map((fact) => fact.trim())
+      .filter(Boolean);
+    if (!creatorName.trim() || facts.length === 0) {
+      setError('Add your name and at least one factual resume detail.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setWorkflow(null);
+    try {
+      setWorkflow(
+        await createResume(
+          {
+            full_name: creatorName.trim(),
+            email: creatorEmail.trim() || undefined,
+            phone: creatorPhone.trim() || undefined,
+            location: creatorLocation.trim() || undefined,
+            links: creatorLinks
+              .split('\n')
+              .map((link) => link.trim())
+              .filter(Boolean),
+            target_role: creatorTargetRole.trim() || undefined,
+            source_facts: facts.map((text, index) => ({
+              fact_id: `fact-${index + 1}`,
+              text,
+            })),
+          },
+          jobDescription,
+          userInstructions,
+        ),
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : 'Failed to run the resume creation workflow.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const review = workflow?.review;
+  const creation = workflow?.creation;
 
   return (
     <div className="app">
       <header className="app-header">
         <p className="eyebrow">MULTI-MODEL RESUME INTELLIGENCE</p>
-        <h1>Resume Review Agent</h1>
-        <p>Content, visual, and layout analysis coordinated in one workflow.</p>
+        <h1>Resume Intelligence Agents</h1>
+        <p>Review an existing resume or create a factual LaTeX draft.</p>
       </header>
 
       <main className="app-main">
-        <section className="upload-section">
-          <h2>Upload resume</h2>
-          <FileUpload
-            onFileSelect={(selected) => {
-              setFile(selected);
+        <div className="workflow-tabs" role="tablist">
+          <button
+            className={mode === 'review' ? 'active' : ''}
+            onClick={() => {
+              setMode('review');
+              setWorkflow(null);
               setError('');
             }}
-            disabled={loading}
-          />
-        </section>
+            type="button"
+          >
+            Review resume
+          </button>
+          <button
+            className={mode === 'create' ? 'active' : ''}
+            onClick={() => {
+              setMode('create');
+              setWorkflow(null);
+              setError('');
+            }}
+            type="button"
+          >
+            Create resume
+          </button>
+        </div>
+
+        {mode === 'review' ? (
+          <section className="upload-section">
+            <h2>Upload resume</h2>
+            <FileUpload
+              onFileSelect={(selected) => {
+                setFile(selected);
+                setError('');
+              }}
+              disabled={loading}
+            />
+          </section>
+        ) : (
+          <section className="creator-form">
+            <div>
+              <p className="eyebrow">RESUME CREATOR AGENT</p>
+              <h2>Create from verified facts</h2>
+              <p className="field-note">
+                Luna may rewrite your facts, but it must cite them and cannot
+                invent missing metrics.
+              </p>
+            </div>
+            <div className="creator-grid">
+              <label>
+                Full name *
+                <input
+                  value={creatorName}
+                  onChange={(event) => setCreatorName(event.target.value)}
+                  disabled={loading}
+                />
+              </label>
+              <label>
+                Target role
+                <input
+                  value={creatorTargetRole}
+                  onChange={(event) => setCreatorTargetRole(event.target.value)}
+                  disabled={loading}
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  value={creatorEmail}
+                  onChange={(event) => setCreatorEmail(event.target.value)}
+                  disabled={loading}
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  value={creatorPhone}
+                  onChange={(event) => setCreatorPhone(event.target.value)}
+                  disabled={loading}
+                />
+              </label>
+              <label>
+                Location
+                <input
+                  value={creatorLocation}
+                  onChange={(event) => setCreatorLocation(event.target.value)}
+                  disabled={loading}
+                />
+              </label>
+              <label>
+                Links, one per line
+                <textarea
+                  value={creatorLinks}
+                  onChange={(event) => setCreatorLinks(event.target.value)}
+                  disabled={loading}
+                  rows={2}
+                  placeholder="https://linkedin.com/in/..."
+                />
+              </label>
+            </div>
+            <label>
+              Verified career, project, education, and skill facts *
+              <textarea
+                value={creatorFacts}
+                onChange={(event) => setCreatorFacts(event.target.value)}
+                disabled={loading}
+                rows={10}
+                placeholder={'One fact per line, including employer, role, dates, and known outcomes.\nExample: At Example Co, Software Engineer, Jan 2024–Present.\nReduced processing time by 40% by adding Redis caching.'}
+              />
+            </label>
+          </section>
+        )}
 
         <section className="job-description-section">
-          <h2>Review context</h2>
+          <h2>{mode === 'review' ? 'Review context' : 'Creation context'}</h2>
           <label htmlFor="job-description">Job description</label>
           <textarea
             id="job-description"
@@ -207,11 +366,21 @@ function App() {
 
         <button
           className="analyze-btn"
-          onClick={handleAnalyze}
-          disabled={!file || loading}
+          onClick={mode === 'review' ? handleAnalyze : handleCreate}
+          disabled={
+            loading ||
+            (mode === 'review'
+              ? !file
+              : !creatorName.trim() || !creatorFacts.trim())
+          }
         >
-          {loading ? 'Running review workflow…' : 'Review resume'}
+          {loading
+            ? `Running ${mode} workflow...`
+            : mode === 'review'
+              ? 'Review resume'
+              : 'Create resume draft'}
         </button>
+        {mode === 'review' && (
         <button
           className="mock-test-btn"
           onClick={() => {
@@ -222,6 +391,7 @@ function App() {
         >
           Preview workflow result
         </button>
+        )}
 
         {error && <div className="error-message" role="alert">{error}</div>}
 
@@ -230,7 +400,7 @@ function App() {
             <div className="result-heading">
               <div>
                 <p className="eyebrow">WORKFLOW {workflow.workflow_id.slice(0, 8)}</p>
-                <h2>Review results</h2>
+                <h2>{creation ? 'Resume draft' : 'Review results'}</h2>
               </div>
               <span className={`status-badge status-${workflow.status}`}>
                 {workflow.status.replace('_', ' ')}
@@ -270,6 +440,63 @@ function App() {
                 </p>
               )}
             </div>
+
+            {creation && (
+              <div className="creation-card">
+                <div>
+                  <p className="eyebrow">RESUME CREATOR AGENT</p>
+                  <h3>Grounded LaTeX resume draft</h3>
+                  <p>{workflow.final_message}</p>
+                </div>
+
+                {creation.artifact && (
+                  <>
+                    <div className="artifact-actions">
+                      {creation.artifact.pdf_download_url && (
+                        <a
+                          className="artifact-link primary"
+                          href={artifactUrl(creation.artifact.pdf_download_url)}
+                          download
+                        >
+                          Download PDF
+                        </a>
+                      )}
+                      <a
+                        className="artifact-link"
+                        href={artifactUrl(creation.artifact.tex_download_url)}
+                        download
+                      >
+                        Download LaTeX source
+                      </a>
+                    </div>
+                    <p className="field-note">
+                      Compilation status:{' '}
+                      {creation.artifact.compilation_status.replace('_', ' ')}.
+                      {creation.requires_user_review
+                        ? ' Review every fact before using this resume.'
+                        : ''}
+                    </p>
+                  </>
+                )}
+
+                <div className="creation-stats">
+                  <span>{creation.claims_ledger.length} grounded claims</span>
+                  <span>{creation.document?.missing_information.length ?? 0} missing details</span>
+                  <span>{creation.model}</span>
+                </div>
+
+                {(creation.document?.missing_information.length ?? 0) > 0 && (
+                  <>
+                    <h4>Information to add next</h4>
+                    <ul>
+                      {creation.document?.missing_information.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
 
             {review?.policy_findings.length ? (
               <div className="policy-card">

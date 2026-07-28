@@ -5,6 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from core.creator_schemas import CreatorAgentResult, ResumeCreationBrief
 from core.review_schemas import (
     ContentReviewResponse,
     LayoutAnalysisResponse,
@@ -53,14 +54,19 @@ class ResumeWorkflowRequest(BaseModel):
     file_type: Optional[str] = None
     job_description: str = ""
     user_instructions: str = ""
+    creation_brief: Optional[ResumeCreationBrief] = None
 
     @model_validator(mode="after")
-    def require_review_document(self) -> "ResumeWorkflowRequest":
+    def require_intent_inputs(self) -> "ResumeWorkflowRequest":
         if self.intent == WorkflowIntent.REVIEW:
             if not self.file_base64 or not self.file_type:
                 raise ValueError(
                     "file_base64 and file_type are required for review workflows"
                 )
+        if self.intent == WorkflowIntent.CREATE and self.creation_brief is None:
+            raise ValueError(
+                "creation_brief is required for create workflows"
+            )
         return self
 
 
@@ -116,6 +122,7 @@ class ResumeWorkflowResponse(BaseModel):
     final_message: str
     summary: Optional[OrchestratorSummary] = None
     review: Optional[ReviewAgentResult] = None
+    creation: Optional[CreatorAgentResult] = None
     agent_statuses: dict[str, AgentStatus]
     warnings: list[WorkflowMessage] = Field(default_factory=list)
     errors: list[WorkflowMessage] = Field(default_factory=list)

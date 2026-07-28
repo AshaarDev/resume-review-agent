@@ -3,6 +3,8 @@
 from pathlib import Path
 
 from agents.resume_review_agent import ResumeReviewAgent
+from agents.resume_creator_agent import ResumeCreatorAgent
+from core.creator_schemas import CreatorAgentResult, ResumeCreationBrief
 from core.workflow_schemas import (
     AgentStatus,
     ReviewAgentResult,
@@ -32,7 +34,16 @@ def _agent_result() -> ReviewAgentResult:
     )
 
 
-def test_create_and_revise_are_reserved_without_agent_calls(monkeypatch):
+def _creation_brief() -> ResumeCreationBrief:
+    return ResumeCreationBrief(
+        full_name="Ada Lovelace",
+        source_facts=[
+            {"fact_id": "work-1", "text": "Built an analytics engine."}
+        ],
+    )
+
+
+def test_revise_is_reserved_without_agent_calls(monkeypatch):
     monkeypatch.setattr(
         ResumeReviewAgent,
         "run",
@@ -40,14 +51,45 @@ def test_create_and_revise_are_reserved_without_agent_calls(monkeypatch):
             AssertionError("agent must not run")
         ),
     )
-    for intent in (WorkflowIntent.CREATE, WorkflowIntent.REVISE):
-        response = run_resume_workflow(intent)
-        assert response.status == WorkflowStatus.NOT_IMPLEMENTED
-        assert response.review is None
-        assert (
-            response.agent_statuses["resume_creator_agent"]
-            == AgentStatus.NOT_INVOKED
+    response = run_resume_workflow(WorkflowIntent.REVISE)
+    assert response.status == WorkflowStatus.NOT_IMPLEMENTED
+    assert response.review is None
+    assert (
+        response.agent_statuses["resume_creator_agent"]
+        == AgentStatus.NOT_INVOKED
+    )
+
+
+def test_create_routes_to_creator_and_cleans_workspace(monkeypatch, tmp_path):
+    monkeypatch.setattr(document_processor, "TEMP_ROOT", tmp_path)
+    observed = {}
+
+    def fake_run(
+        self,
+        brief,
+        job_description,
+        user_instructions,
+        workspace_path,
+        policy,
+    ):
+        observed["brief"] = brief
+        observed["workspace"] = workspace_path
+        return CreatorAgentResult(
+            status="partial",
+            model="gpt-5.6-luna",
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
         )
+
+    monkeypatch.setattr(ResumeCreatorAgent, "run", fake_run)
+    response = run_resume_workflow(
+        WorkflowIntent.CREATE, creation_brief=_creation_brief()
+    )
+
+    assert response.status == WorkflowStatus.PARTIAL
+    assert response.creation is not None
+    assert observed["brief"].full_name == "Ada Lovelace"
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_review_uses_one_workspace_and_cleans_it(

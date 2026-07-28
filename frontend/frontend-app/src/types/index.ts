@@ -14,13 +14,37 @@ export type AgentStatus =
   | 'failed'
   | 'not_invoked';
 
-export interface WorkflowRequest {
+export interface ReviewWorkflowRequest {
   intent: 'review';
   file_base64: string;
   file_type: string;
   job_description?: string;
   user_instructions?: string;
 }
+
+export interface ResumeSourceFact {
+  fact_id: string;
+  text: string;
+}
+
+export interface ResumeCreationBrief {
+  full_name: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  links?: string[];
+  target_role?: string;
+  source_facts: ResumeSourceFact[];
+}
+
+export interface CreateWorkflowRequest {
+  intent: 'create';
+  creation_brief: ResumeCreationBrief;
+  job_description?: string;
+  user_instructions?: string;
+}
+
+export type WorkflowRequest = ReviewWorkflowRequest | CreateWorkflowRequest;
 
 export interface WorkflowMessage {
   code: string;
@@ -143,6 +167,72 @@ export interface OrchestratorSummary {
   next_step: string;
 }
 
+export interface GeneratedResumeBullet {
+  text: string;
+  bold_phrases: string[];
+  source_fact_ids: string[];
+}
+
+export interface GeneratedResumeDocument {
+  professional_summary: string | null;
+  professional_summary_source_fact_ids: string[];
+  experiences: Array<{
+    organization: string;
+    role: string;
+    location: string;
+    date_range: string;
+    source_fact_ids: string[];
+    bullets: GeneratedResumeBullet[];
+  }>;
+  projects: Array<{
+    name: string;
+    date_range: string;
+    url: string | null;
+    source_fact_ids: string[];
+    bullets: GeneratedResumeBullet[];
+  }>;
+  education: Array<{
+    institution: string;
+    degree: string;
+    location: string;
+    date_range: string;
+    details: string[];
+    source_fact_ids: string[];
+  }>;
+  skill_groups: Array<{
+    label: string;
+    skills: string[];
+    source_fact_ids: string[];
+  }>;
+  missing_information: string[];
+}
+
+export interface CreatorAgentResult {
+  status: 'completed' | 'partial' | 'failed';
+  model: string;
+  policy_id: string;
+  policy_version: string;
+  document: GeneratedResumeDocument | null;
+  claims_ledger: Array<{
+    section: string;
+    generated_text: string;
+    source_fact_ids: string[];
+  }>;
+  artifact: {
+    artifact_id: string;
+    template_id: string;
+    template_version: string;
+    compilation_status: 'compiled' | 'source_only' | 'failed';
+    tex_download_url: string;
+    pdf_download_url: string | null;
+    error_code: string | null;
+    error_message: string | null;
+  } | null;
+  requires_user_review: boolean;
+  warnings: WorkflowMessage[];
+  errors: WorkflowMessage[];
+}
+
 export interface WorkflowResponse {
   workflow_id: string;
   policy_id: string | null;
@@ -152,6 +242,7 @@ export interface WorkflowResponse {
   final_message: string;
   summary: OrchestratorSummary | null;
   review: ReviewAgentResult | null;
+  creation: CreatorAgentResult | null;
   agent_statuses: Record<string, AgentStatus>;
   warnings: WorkflowMessage[];
   errors: WorkflowMessage[];

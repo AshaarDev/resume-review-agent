@@ -29,7 +29,10 @@ from services.review_pipeline import (
     load_resume_file,
 )
 from services.resume_policy import serialize_resume_quality_policy
+from core.creator_schemas import ResumeCreationBrief
+from core.workflow_schemas import WorkflowIntent
 from workflows.resume_workflow import (
+    run_resume_workflow,
     run_resume_review_workflow as execute_resume_review_workflow,
 )
 
@@ -325,6 +328,36 @@ def run_resume_review_workflow_base64(
         ).model_dump(mode="json")
     except DocumentProcessingError as exc:
         return _processing_error(exc)
+
+
+@mcp.tool()
+def create_resume(
+    creation_brief: dict,
+    job_description: str = "",
+    user_instructions: str = "",
+) -> dict:
+    """Create a policy-aware LaTeX resume through the shared LangGraph workflow.
+
+    The creation brief must contain full_name and source_facts. Each source fact
+    has a stable fact_id and factual text. Generated claims cite these IDs.
+    """
+
+    try:
+        brief = ResumeCreationBrief.model_validate(creation_brief)
+        return run_resume_workflow(
+            intent=WorkflowIntent.CREATE,
+            creation_brief=brief,
+            job_description=job_description,
+            user_instructions=user_instructions,
+        ).model_dump(mode="json")
+    except Exception:
+        return {
+            "status": "failed",
+            "error_code": "INVALID_CREATION_BRIEF",
+            "error_message": (
+                "The resume creation brief is invalid or could not be processed."
+            ),
+        }
 
 
 @mcp.tool()

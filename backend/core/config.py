@@ -45,6 +45,21 @@ class Settings:
     ORCHESTRATOR_TIMEOUT_SECONDS: int = int(
         os.getenv("ORCHESTRATOR_TIMEOUT_SECONDS", "60")
     )
+
+    # Resume Creator Agent configuration
+    CREATOR_MODEL: str = os.getenv("CREATOR_MODEL", "gpt-5.6-luna")
+    CREATOR_REASONING_EFFORT: str = os.getenv(
+        "CREATOR_REASONING_EFFORT", "none"
+    )
+    CREATOR_TIMEOUT_SECONDS: int = int(
+        os.getenv("CREATOR_TIMEOUT_SECONDS", "60")
+    )
+    LATEX_COMPILE_TIMEOUT_SECONDS: int = int(
+        os.getenv("LATEX_COMPILE_TIMEOUT_SECONDS", "30")
+    )
+    CREATOR_ARTIFACT_TTL_HOURS: int = int(
+        os.getenv("CREATOR_ARTIFACT_TTL_HOURS", "24")
+    )
     
     SYSTEM_PROMPT: str = """You are a helpful resume review assistant.
 

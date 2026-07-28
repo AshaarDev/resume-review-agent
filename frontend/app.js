@@ -11,8 +11,45 @@ const userInstructions = document.getElementById('userInstructions');
 const resultsSection = document.getElementById('resultsSection');
 const loading = document.getElementById('loading');
 const resultsContent = document.getElementById('resultsContent');
+const reviewModeBtn = document.getElementById('reviewModeBtn');
+const createModeBtn = document.getElementById('createModeBtn');
+const reviewInput = document.getElementById('reviewInput');
+const creatorInput = document.getElementById('creatorInput');
+const creatorName = document.getElementById('creatorName');
+const creatorEmail = document.getElementById('creatorEmail');
+const creatorPhone = document.getElementById('creatorPhone');
+const creatorLocation = document.getElementById('creatorLocation');
+const creatorTargetRole = document.getElementById('creatorTargetRole');
+const creatorLinks = document.getElementById('creatorLinks');
+const creatorFacts = document.getElementById('creatorFacts');
 
 let selectedFile = null;
+let workflowMode = 'review';
+
+function setWorkflowMode(mode) {
+    workflowMode = mode;
+    const isReview = mode === 'review';
+    reviewModeBtn.classList.toggle('active', isReview);
+    createModeBtn.classList.toggle('active', !isReview);
+    reviewInput.style.display = isReview ? 'block' : 'none';
+    creatorInput.style.display = isReview ? 'none' : 'block';
+    testMockBtn.style.display = isReview ? 'block' : 'none';
+    analyzeBtn.textContent = isReview ? 'Review Resume' : 'Create Resume Draft';
+    updatePrimaryButton();
+    resultsSection.style.display = 'none';
+}
+
+function updatePrimaryButton() {
+    analyzeBtn.disabled = workflowMode === 'review'
+        ? !selectedFile
+        : !creatorName.value.trim() || !creatorFacts.value.trim();
+}
+
+reviewModeBtn.addEventListener('click', () => setWorkflowMode('review'));
+createModeBtn.addEventListener('click', () => setWorkflowMode('create'));
+[creatorName, creatorFacts].forEach((field) => {
+    field.addEventListener('input', updatePrimaryButton);
+});
 
 // Upload box click handler
 uploadBox.addEventListener('click', () => {
@@ -69,7 +106,7 @@ function handleFile(file) {
     
     uploadBox.style.display = 'none';
     fileInfo.style.display = 'flex';
-    analyzeBtn.disabled = false;
+    updatePrimaryButton();
 }
 
 // Remove file handler
@@ -78,7 +115,7 @@ removeFileBtn.addEventListener('click', () => {
     fileInput.value = '';
     uploadBox.style.display = 'block';
     fileInfo.style.display = 'none';
-    analyzeBtn.disabled = true;
+    updatePrimaryButton();
     resultsSection.style.display = 'none';
 });
 
@@ -299,7 +336,11 @@ With these improvements, your resume will stand out to technical recruiters and 
 
 // Analyze button handler
 analyzeBtn.addEventListener('click', async () => {
-    if (!selectedFile) return;
+    if (workflowMode === 'review' && !selectedFile) return;
+    if (
+        workflowMode === 'create' &&
+        (!creatorName.value.trim() || !creatorFacts.value.trim())
+    ) return;
 
     // Show results section with loading
     resultsSection.style.display = 'block';
@@ -308,18 +349,42 @@ analyzeBtn.addEventListener('click', async () => {
     resultsContent.innerHTML = '';
 
     try {
-        // Convert file to base64
-        const base64Data = await fileToBase64(selectedFile);
-        const fileType = getFileExtension(selectedFile.name);
-
-        // Prepare request data
-        const requestData = {
-            intent: 'review',
-            file_base64: base64Data,
-            file_type: fileType,
-            job_description: jobDescription.value.trim(),
-            user_instructions: userInstructions.value.trim()
-        };
+        let requestData;
+        if (workflowMode === 'review') {
+            const base64Data = await fileToBase64(selectedFile);
+            requestData = {
+                intent: 'review',
+                file_base64: base64Data,
+                file_type: getFileExtension(selectedFile.name),
+                job_description: jobDescription.value.trim(),
+                user_instructions: userInstructions.value.trim()
+            };
+        } else {
+            const facts = creatorFacts.value
+                .split('\n')
+                .map((fact) => fact.trim())
+                .filter(Boolean);
+            requestData = {
+                intent: 'create',
+                creation_brief: {
+                    full_name: creatorName.value.trim(),
+                    email: creatorEmail.value.trim() || null,
+                    phone: creatorPhone.value.trim() || null,
+                    location: creatorLocation.value.trim() || null,
+                    target_role: creatorTargetRole.value.trim() || null,
+                    links: creatorLinks.value
+                        .split('\n')
+                        .map((link) => link.trim())
+                        .filter(Boolean),
+                    source_facts: facts.map((text, index) => ({
+                        fact_id: `fact-${index + 1}`,
+                        text
+                    }))
+                },
+                job_description: jobDescription.value.trim(),
+                user_instructions: userInstructions.value.trim()
+            };
+        }
 
         // Call API
         const response = await fetch('/api/resume-workflows', {
@@ -414,7 +479,50 @@ function escapeHtml(value) {
 // Helper: Display workflow and raw branch results
 function displayResults(result) {
     const review = result.review;
+    const creation = result.creation;
     const summary = result.summary;
+
+    if (creation) {
+        const artifact = creation.artifact;
+        const downloads = artifact ? `
+            <div class="artifact-actions">
+                ${artifact.pdf_download_url ? `
+                    <a class="artifact-link primary" href="${escapeHtml(artifact.pdf_download_url)}" download>Download PDF</a>
+                ` : ''}
+                <a class="artifact-link" href="${escapeHtml(artifact.tex_download_url)}" download>Download LaTeX source</a>
+            </div>
+            <p class="field-note">Compilation status: ${escapeHtml(artifact.compilation_status).replaceAll('_', ' ')}. Review every fact before using this resume.</p>
+        ` : '';
+        const missing = (creation.document?.missing_information || [])
+            .map((item) => `<li>${escapeHtml(item)}</li>`)
+            .join('');
+        const errors = (creation.errors || [])
+            .map((item) => `<li>${escapeHtml(item.message)}</li>`)
+            .join('');
+        resultsContent.innerHTML = `
+            <div class="workflow-header">
+                <div>
+                    <p class="workflow-id">Workflow ${escapeHtml(result.workflow_id).slice(0, 8)}</p>
+                    <h3>Grounded LaTeX resume draft</h3>
+                </div>
+                <span class="status-badge status-${escapeHtml(result.status)}">
+                    ${escapeHtml(result.status).replaceAll('_', ' ')}
+                </span>
+            </div>
+            <div class="creation-card">
+                <p>${escapeHtml(result.final_message)}</p>
+                ${downloads}
+                <div class="creation-stats">
+                    <span>${creation.claims_ledger.length} grounded claims</span>
+                    <span>${creation.document?.missing_information.length || 0} missing details</span>
+                    <span>${escapeHtml(creation.model)}</span>
+                </div>
+                ${missing ? `<h4>Information to add next</h4><ul>${missing}</ul>` : ''}
+                ${errors ? `<div class="error"><ul>${errors}</ul></div>` : ''}
+            </div>
+        `;
+        return;
+    }
 
     if (!review) {
         resultsContent.innerHTML = `

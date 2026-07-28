@@ -15,6 +15,7 @@ class ResumeWorkflowState(TypedDict, total=False):
     file_type: str
     job_description: str
     user_instructions: str
+    creation_brief: dict | None
     review_result: dict | None
     creation_result: dict | None
     comparison_result: dict | None
