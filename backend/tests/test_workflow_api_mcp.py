@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 
+import fitz
 from fastapi.testclient import TestClient
 
 from core.workflow_schemas import (
@@ -103,6 +104,41 @@ def test_artifact_download_is_allowlisted(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.text == "safe"
     assert blocked.status_code == 404
+
+
+def test_pdf_artifact_can_be_rendered_inline(monkeypatch, tmp_path):
+    artifact_id = "b" * 32
+    artifact_dir = tmp_path / artifact_id
+    artifact_dir.mkdir()
+    (artifact_dir / "resume.pdf").write_bytes(b"%PDF-1.4\n")
+    monkeypatch.setattr(artifact_store, "ARTIFACT_ROOT", tmp_path)
+
+    preview = client.get(
+        f"/api/artifacts/{artifact_id}/resume.pdf?preview=true"
+    )
+    download = client.get(f"/api/artifacts/{artifact_id}/resume.pdf")
+
+    assert preview.status_code == 200
+    assert preview.headers["content-disposition"].startswith("inline;")
+    assert download.headers["content-disposition"].startswith("attachment;")
+
+
+def test_pdf_artifact_has_png_preview(monkeypatch, tmp_path):
+    artifact_id = "c" * 32
+    artifact_dir = tmp_path / artifact_id
+    artifact_dir.mkdir()
+    document = fitz.open()
+    page = document.new_page(width=612, height=792)
+    page.insert_text((72, 72), "Resume preview")
+    document.save(artifact_dir / "resume.pdf")
+    document.close()
+    monkeypatch.setattr(artifact_store, "ARTIFACT_ROOT", tmp_path)
+
+    preview = client.get(f"/api/artifact-previews/{artifact_id}.png")
+
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/png"
+    assert preview.content.startswith(b"\x89PNG")
 
 
 def test_all_fourteen_mcp_tools_are_unique():

@@ -1,3 +1,14 @@
+FROM node:22-alpine AS frontend-build
+
+WORKDIR /frontend
+
+COPY frontend/frontend-app/package.json frontend/frontend-app/package-lock.json ./
+RUN npm ci
+
+COPY frontend/frontend-app ./
+RUN npm run build
+
+
 FROM python:3.10-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -28,6 +39,7 @@ RUN python -m pip install --upgrade pip \
 
 COPY backend backend
 COPY frontend frontend
+COPY --from=frontend-build /frontend/dist frontend/frontend-app/dist
 
 # Validate the exact production template during image construction. A missing
 # TeX package makes the build fail instead of disabling PDF generation at runtime.

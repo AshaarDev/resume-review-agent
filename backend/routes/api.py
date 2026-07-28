@@ -1,7 +1,7 @@
 """API routes for independent and unified resume reviews."""
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from core.models import (
     ChatRequest,
@@ -131,7 +131,7 @@ def create_resume_workflow(request: ResumeWorkflowRequest) -> ResumeWorkflowResp
 
 @router.get("/artifacts/{artifact_id}/{filename}")
 def download_resume_artifact(
-    artifact_id: str, filename: str
+    artifact_id: str, filename: str, preview: bool = False
 ) -> FileResponse:
     """Download only a generated resume.tex or resume.pdf artifact."""
 
@@ -143,4 +143,41 @@ def download_resume_artifact(
         if path.suffix == ".pdf"
         else "application/x-tex"
     )
-    return FileResponse(path, media_type=media_type, filename=filename)
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=filename,
+        content_disposition_type=(
+            "inline" if preview and path.suffix == ".pdf" else "attachment"
+        ),
+    )
+
+
+@router.get("/artifact-previews/{artifact_id}.png")
+def preview_resume_artifact(artifact_id: str) -> Response:
+    """Render the first generated PDF page as a browser-safe PNG preview."""
+
+    path = resolve_artifact(artifact_id, "resume.pdf")
+    if path is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    try:
+        import fitz
+
+        with fitz.open(path) as document:
+            if document.page_count == 0:
+                raise ValueError("PDF contains no pages")
+            pixmap = document[0].get_pixmap(
+                matrix=fitz.Matrix(1.5, 1.5),
+                alpha=False,
+            )
+            image_bytes = pixmap.tobytes("png")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="The generated PDF could not be rendered for preview.",
+        ) from exc
+    return Response(
+        content=image_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )

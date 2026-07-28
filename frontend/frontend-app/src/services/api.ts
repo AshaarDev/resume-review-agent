@@ -5,7 +5,8 @@ import type {
 } from '../types';
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? 'http://127.0.0.1:8001' : '');
 
 export const analyzeResume = async (
   file: File,
@@ -28,12 +29,12 @@ export const analyzeResume = async (
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    const detail = payload?.detail;
-    const message =
-      typeof detail === 'string'
-        ? detail
-        : detail?.message || 'Failed to run the resume review workflow';
-    throw new Error(message);
+    throw new Error(
+      responseErrorMessage(
+        payload,
+        'Failed to run the resume review workflow',
+      ),
+    );
   }
   return response.json();
 };
@@ -65,12 +66,9 @@ const runWorkflow = async (
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    const detail = payload?.detail;
-    const message =
-      typeof detail === 'string'
-        ? detail
-        : detail?.message || 'Failed to run the resume workflow';
-    throw new Error(message);
+    throw new Error(
+      responseErrorMessage(payload, 'Failed to run the resume workflow'),
+    );
   }
   return response.json();
 };
@@ -85,3 +83,38 @@ const fileToBase64 = (file: File): Promise<string> =>
     };
     reader.onerror = reject;
   });
+
+interface ValidationIssue {
+  loc?: Array<string | number>;
+  msg?: string;
+}
+
+const responseErrorMessage = (
+  payload: unknown,
+  fallback: string,
+): string => {
+  if (!payload || typeof payload !== 'object') return fallback;
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === 'string') return detail;
+  if (
+    detail &&
+    typeof detail === 'object' &&
+    'message' in detail &&
+    typeof (detail as { message?: unknown }).message === 'string'
+  ) {
+    return (detail as { message: string }).message;
+  }
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .slice(0, 3)
+      .map((issue: ValidationIssue) => {
+        const path = (issue.loc || [])
+          .filter((part) => part !== 'body')
+          .map((part) => String(part).replaceAll('_', ' '))
+          .join(' → ');
+        return `${path ? `${path}: ` : ''}${issue.msg || 'Invalid value'}`;
+      });
+    if (messages.length) return messages.join(' ');
+  }
+  return fallback;
+};

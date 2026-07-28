@@ -11,6 +11,10 @@ from routes.api import router as api_router
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
+REACT_DIST_DIR = FRONTEND_DIR / "frontend-app" / "dist"
+SERVED_FRONTEND_DIR = (
+    REACT_DIST_DIR if (REACT_DIST_DIR / "index.html").is_file() else FRONTEND_DIR
+)
 
 app = FastAPI(title="Resume Intelligence Agents")
 
@@ -25,23 +29,21 @@ app.add_middleware(
 # Include API routes
 app.include_router(api_router)
 
-# Mount frontend static files
-app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="assets")
+# Vite emits production assets into ``dist/assets``. The legacy static
+# directory remains a local fallback until a React build has been generated.
+ASSETS_DIR = SERVED_FRONTEND_DIR / "assets"
+if ASSETS_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 
 @app.get("/")
 def serve_frontend() -> FileResponse:
-    """Serve the frontend HTML."""
-    return FileResponse(FRONTEND_DIR / "index.html")
+    """Serve the React frontend (or the legacy local fallback)."""
+    return FileResponse(SERVED_FRONTEND_DIR / "index.html")
 
 
-@app.get("/app.js")
-def serve_js() -> FileResponse:
-    """Serve the frontend JavaScript."""
-    return FileResponse(FRONTEND_DIR / "app.js")
-
-
-@app.get("/styles.css")
-def serve_css() -> FileResponse:
-    """Serve the frontend CSS."""
-    return FileResponse(FRONTEND_DIR / "styles.css")
+@app.get("/signin")
+@app.get("/app")
+def serve_react_route() -> FileResponse:
+    """Return the React entry point for client-side routes."""
+    return FileResponse(SERVED_FRONTEND_DIR / "index.html")
