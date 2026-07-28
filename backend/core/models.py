@@ -37,6 +37,7 @@ class ChatResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+    latex_compiler_available: bool
 
 
 __all__ = [

@@ -25,6 +25,7 @@ from services.review_pipeline import (
 )
 from workflows.resume_workflow import run_resume_workflow
 from services.artifact_store import resolve_artifact
+from services.latex_compiler import latex_compiler_available
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -32,7 +33,10 @@ router = APIRouter(prefix="/api", tags=["api"])
 @router.get("/health", response_model=HealthResponse)
 def health_check() -> HealthResponse:
     """Health check endpoint."""
-    return HealthResponse(status="ok")
+    return HealthResponse(
+        status="ok",
+        latex_compiler_available=latex_compiler_available(),
+    )
 
 
 @router.post("/chat", response_model=ChatResponse)

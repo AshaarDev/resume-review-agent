@@ -91,6 +91,9 @@ revision limits, and authenticated artifact ownership.
 - `CREATOR_MODEL` is independent of the review and synthesis models.
 - Generated content is evidence-linked, but semantic correctness still
   requires human verification.
+- The included Docker image provides TeX Live, validates the real template
+  during image construction, and makes PDF generation server-owned. End users
+  do not install LaTeX.
 - Artifacts currently expire locally and are not user-authenticated. Production
   deployment should use authenticated object storage and per-user ownership.
 - The approved template retains its original attribution and license metadata

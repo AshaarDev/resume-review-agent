@@ -33,6 +33,14 @@ def _response() -> ResumeWorkflowResponse:
     )
 
 
+def test_health_reports_pdf_runtime_status():
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert isinstance(response.json()["latex_compiler_available"], bool)
+
+
 def test_workflow_api_and_validation(monkeypatch):
     monkeypatch.setattr(api, "run_resume_workflow", lambda **kwargs: _response())
     response = client.post(

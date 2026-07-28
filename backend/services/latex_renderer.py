@@ -62,23 +62,23 @@ def render_resume_latex(
 def _render_header(brief: ResumeCreationBrief) -> str:
     contact_parts = []
     if brief.phone:
-        contact_parts.append(r"\faPhone* \texttt{" + latex_escape(brief.phone) + "}")
+        contact_parts.append(r"\texttt{" + latex_escape(brief.phone) + "}")
     if brief.email:
         contact_parts.append(
-            r"\faEnvelope \hspace{2pt} \texttt{"
+            r"\texttt{"
             + latex_escape(brief.email)
             + "}"
         )
     if brief.location:
         contact_parts.append(
-            r"\faMapMarker* \hspace{2pt}\texttt{"
+            r"\texttt{"
             + latex_escape(brief.location)
             + "}"
         )
     for link in brief.links:
         if _safe_url(link):
             contact_parts.append(
-                r"\faGlobe \hspace{2pt}\href{"
+                r"\href{"
                 + link
                 + r"}{\myuline{"
                 + latex_escape(_link_label(link))

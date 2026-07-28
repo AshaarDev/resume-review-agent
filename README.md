@@ -119,6 +119,38 @@ Set-Location backend
 Open <http://localhost:8001>. Interactive API documentation is available at
 <http://localhost:8001/docs>.
 
+### Run the complete production runtime with Docker
+
+The container includes TeX Live for downloadable PDF generation, LibreOffice
+for DOCX visual conversion, and Tesseract for image text extraction. Users do
+not install any of these tools.
+
+Create `backend/.env`, then run:
+
+```powershell
+docker compose up --build
+```
+
+Open <http://localhost:8001>. Confirm the PDF runtime is available:
+
+```powershell
+Invoke-RestMethod http://localhost:8001/api/health
+```
+
+The response should include:
+
+```json
+{
+  "status": "ok",
+  "latex_compiler_available": true
+}
+```
+
+The Docker build compiles the actual approved resume template. The image build
+fails if a required TeX package is missing, preventing a deployment that
+silently falls back to source-only artifacts. Generated artifacts are stored in
+the `resume-artifacts` Docker volume.
+
 ## API
 
 ### `POST /api/analyze-resume`
@@ -255,7 +287,7 @@ branches fail.
 
 ### Other endpoints
 
-- `GET /api/health`
+- `GET /api/health` — includes `latex_compiler_available`
 - `GET /api/artifacts/{artifact_id}/resume.tex`
 - `GET /api/artifacts/{artifact_id}/resume.pdf`
 - `POST /api/chat`

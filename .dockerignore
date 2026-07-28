@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+.vscode
+.pytest_cache
+**/.pytest_cache
+**/__pycache__
+**/*.py[cod]
+**/.env
+**/artifacts
+**/temp
+**/uploads
+frontend/frontend-app/node_modules
+frontend/frontend-app/dist
+venv

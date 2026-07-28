@@ -22,6 +22,10 @@ class LatexCompilationResult:
         self.error_message = error_message
 
 
+def latex_compiler_available() -> bool:
+    return shutil.which("pdflatex") is not None
+
+
 def compile_latex(tex_path: Path) -> LatexCompilationResult:
     executable = shutil.which("pdflatex")
     if not executable:
