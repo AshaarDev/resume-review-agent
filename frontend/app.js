@@ -22,6 +22,7 @@ const creatorLocation = document.getElementById('creatorLocation');
 const creatorTargetRole = document.getElementById('creatorTargetRole');
 const creatorLinks = document.getElementById('creatorLinks');
 const creatorFacts = document.getElementById('creatorFacts');
+const sampleCreatorBtn = document.getElementById('sampleCreatorBtn');
 
 let selectedFile = null;
 let workflowMode = 'review';
@@ -49,6 +50,32 @@ reviewModeBtn.addEventListener('click', () => setWorkflowMode('review'));
 createModeBtn.addEventListener('click', () => setWorkflowMode('create'));
 [creatorName, creatorFacts].forEach((field) => {
     field.addEventListener('input', updatePrimaryButton);
+});
+
+sampleCreatorBtn.addEventListener('click', () => {
+    creatorName.value = 'Jordan Lee';
+    creatorTargetRole.value = 'Software Engineer';
+    creatorEmail.value = 'jordan.lee@example.com';
+    creatorPhone.value = '+1 416 555 0142';
+    creatorLocation.value = 'Toronto, Ontario';
+    creatorLinks.value = [
+        'https://linkedin.com/in/jordanlee',
+        'https://github.com/jordanlee'
+    ].join('\n');
+    creatorFacts.value = [
+        'Worked at Northstar Labs as a Software Engineer from January 2023 to Present in Toronto, Ontario.',
+        'Reduced API response time by 42% by introducing Redis caching and optimizing PostgreSQL queries.',
+        'Automated the deployment workflow with GitHub Actions, reducing release time from 45 minutes to 12 minutes.',
+        'Led a team of 5 developers to deliver a customer analytics dashboard used by 18 internal stakeholders.',
+        'Built a document-processing service with Python and FastAPI that processed more than 10,000 files per month.',
+        'Earned a Bachelor of Science in Computer Science from Toronto Metropolitan University in 2022.',
+        'Technical skills include Python, TypeScript, React, FastAPI, PostgreSQL, Redis, Docker, GitHub Actions, and AWS.',
+        'Created an open-source expense tracking application in 2024 using React, FastAPI, and PostgreSQL.'
+    ].join('\n');
+    jobDescription.value = 'Seeking a Software Engineer with experience building scalable APIs, React applications, cloud infrastructure, and automated delivery pipelines.';
+    userInstructions.value = 'Create a concise one-page resume emphasizing measurable technical impact.';
+    updatePrimaryButton();
+    resultsSection.style.display = 'none';
 });
 
 // Upload box click handler

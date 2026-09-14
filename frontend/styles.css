@@ -628,6 +628,30 @@ footer {
     background: #f8fafc;
 }
 
+.creator-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.sample-fill-btn {
+    flex: 0 0 auto;
+    padding: 9px 13px;
+    border: 1px solid #6366f1;
+    border-radius: 8px;
+    background: white;
+    color: #4f46e5;
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.sample-fill-btn:hover {
+    background: #eef2ff;
+}
+
 .creator-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -698,6 +722,10 @@ footer {
 }
 
 @media (max-width: 640px) {
+    .creator-heading {
+        flex-direction: column;
+    }
+
     .creator-grid {
         grid-template-columns: 1fr;
     }

@@ -18,7 +18,9 @@ from services.artifact_store import save_resume_artifacts
 from services.creator_service import (
     CreatorServiceError,
     generate_resume_document,
+    refine_resume_document,
 )
+from services.creator_quality import assess_creator_output
 from services.latex_compiler import compile_latex
 from services.latex_renderer import (
     render_resume_latex,
@@ -51,6 +53,63 @@ class ResumeCreatorAgent:
             tex_path = workspace_path / "resume.tex"
             tex_path.write_text(latex, encoding="utf-8")
             compilation = compile_latex(tex_path)
+            quality = assess_creator_output(
+                brief, document, policy, compilation.pdf_path
+            )
+            quality_warnings: list[CreatorMessage] = []
+
+            if (
+                compilation.status == CompilationStatus.COMPILED
+                and quality.issues
+                and settings.CREATOR_MAX_REFINEMENT_PASSES > 0
+            ):
+                try:
+                    candidate = refine_resume_document(
+                        brief,
+                        policy,
+                        document,
+                        quality.issues,
+                        job_description,
+                        user_instructions,
+                    )
+                    candidate_claims = _build_and_validate_claims(
+                        brief, candidate
+                    )
+                    candidate_tex_path = workspace_path / "resume-refined.tex"
+                    candidate_tex_path.write_text(
+                        render_resume_latex(brief, candidate),
+                        encoding="utf-8",
+                    )
+                    candidate_compilation = compile_latex(candidate_tex_path)
+                    candidate_quality = assess_creator_output(
+                        brief,
+                        candidate,
+                        policy,
+                        candidate_compilation.pdf_path,
+                    )
+                    if (
+                        candidate_compilation.status
+                        == CompilationStatus.COMPILED
+                        and len(candidate_quality.issues)
+                        <= len(quality.issues)
+                    ):
+                        document = candidate
+                        claims = candidate_claims
+                        tex_path = candidate_tex_path
+                        compilation = candidate_compilation
+                        quality = candidate_quality
+                except (CreatorServiceError, ValueError) as exc:
+                    logger.warning("Creator quality refinement skipped: %s", exc)
+                    quality_warnings.append(
+                        CreatorMessage(
+                            code="CREATOR_REFINEMENT_UNAVAILABLE",
+                            message=(
+                                "The initial grounded draft was retained because "
+                                "the quality refinement could not be completed."
+                            ),
+                        )
+                    )
+
             artifact_id = save_resume_artifacts(
                 tex_path, compilation.pdf_path
             )
@@ -71,7 +130,7 @@ class ResumeCreatorAgent:
                 error_code=compilation.error_code,
                 error_message=compilation.error_message,
             )
-            warnings = []
+            warnings = quality_warnings
             if compilation.status != CompilationStatus.COMPILED:
                 warnings.append(
                     CreatorMessage(
@@ -91,6 +150,16 @@ class ResumeCreatorAgent:
                         ),
                     )
                 )
+            if quality.issues:
+                warnings.append(
+                    CreatorMessage(
+                        code="CREATOR_QUALITY_NEEDS_REVIEW",
+                        message=(
+                            "The draft was optimized against the resume policy, "
+                            "but some standards still need user-supplied evidence."
+                        ),
+                    )
+                )
             return CreatorAgentResult(
                 status=(
                     "completed"
@@ -103,6 +172,10 @@ class ResumeCreatorAgent:
                 document=document,
                 claims_ledger=claims,
                 artifact=artifact,
+                quality_status=(
+                    "passed" if quality.passed else "needs_review"
+                ),
+                quality_notes=quality.issues,
                 warnings=warnings,
             )
         except CreatorServiceError as exc:

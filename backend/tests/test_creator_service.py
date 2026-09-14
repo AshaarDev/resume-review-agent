@@ -64,6 +64,10 @@ def test_creator_uses_configured_luna_structured_output(monkeypatch):
     assert calls[0]["model"] == "gpt-5.6-luna"
     assert calls[0]["reasoning"] == {"effort": "none"}
     assert calls[0]["text_format"] is GeneratedResumeDocument
+    system_prompt = calls[0]["input"][0]["content"]
+    assert "XYZ style" in system_prompt
+    assert "one well-filled page" in system_prompt
+    assert "Never fabricate a missing measurement" in system_prompt
 
 
 def test_creator_reports_missing_openai_configuration(monkeypatch):

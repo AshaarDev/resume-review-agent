@@ -205,6 +205,8 @@ export interface GeneratedResumeDocument {
     source_fact_ids: string[];
   }>;
   missing_information: string[];
+  estimated_relevant_experience_years: number | null;
+  experience_estimate_confidence: number;
 }
 
 export interface CreatorAgentResult {
@@ -229,6 +231,8 @@ export interface CreatorAgentResult {
     error_message: string | null;
   } | null;
   requires_user_review: boolean;
+  quality_status: 'passed' | 'needs_review' | 'unavailable';
+  quality_notes: string[];
   warnings: WorkflowMessage[];
   errors: WorkflowMessage[];
 }

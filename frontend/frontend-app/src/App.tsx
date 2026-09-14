@@ -261,6 +261,8 @@ const MOCK_CREATOR_WORKFLOW: WorkflowResponse = {
         source_fact_ids: ['fact-7'],
       }],
       missing_information: ['Confirm the preferred LinkedIn URL.'],
+      estimated_relevant_experience_years: 3,
+      experience_estimate_confidence: 0.9,
     },
     claims_ledger: [
       { section: 'experience', generated_text: 'Reduced API response time by 42%.', source_fact_ids: ['fact-2'] },
@@ -269,6 +271,8 @@ const MOCK_CREATOR_WORKFLOW: WorkflowResponse = {
     ],
     artifact: null,
     requires_user_review: true,
+    quality_status: 'passed',
+    quality_notes: [],
     warnings: [{
       code: 'CREATOR_MISSING_INFORMATION',
       message: 'Confirm the preferred LinkedIn URL.',
@@ -306,6 +310,13 @@ function Logo({ onClick }: { onClick: () => void }) {
 function LandingPage({ navigate }: { navigate: (path: string) => void }) {
   return (
     <div className="landing-page">
+      <div className="landing-aurora-field" aria-hidden="true">
+        <span className="landing-orb landing-orb-one" />
+        <span className="landing-orb landing-orb-two" />
+        <span className="landing-orb landing-orb-three" />
+        <span className="landing-orb landing-orb-four" />
+        <span className="landing-orb landing-orb-five" />
+      </div>
       <nav className="landing-nav">
         <div className="nav-container">
           <Logo onClick={() => navigate('/')} />
@@ -935,8 +946,9 @@ function CreationResults({ workflow }: { workflow: WorkflowResponse }) {
           <div className="creation-stats">
             <div><strong>{creation.claims_ledger.length}</strong><span>Grounded claims</span></div>
             <div><strong>{creation.document?.missing_information.length ?? 0}</strong><span>Missing details</span></div>
-            <div><strong>{creation.requires_user_review ? 'Required' : 'Ready'}</strong><span>Human review</span></div>
+            <div><strong>{creation.quality_status === 'passed' ? 'Passed' : 'Review'}</strong><span>Resume standards</span></div>
           </div>
+          {creation.quality_notes.length > 0 && <div className="missing-info"><h4>Standards needing more evidence</h4><ul>{creation.quality_notes.map((item) => <li key={item}>{item}</li>)}</ul></div>}
           {(creation.document?.missing_information.length ?? 0) > 0 && <div className="missing-info"><h4>Information to add next</h4><ul>{creation.document?.missing_information.map((item) => <li key={item}>{item}</li>)}</ul></div>}
         </div>
         {previewImageUrl ? (
@@ -960,43 +972,14 @@ function GeneratedResumePreview({
 }: {
   imageUrl: string;
 }) {
-  const [renderedImageUrl, setRenderedImageUrl] = useState<string | null>(null);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
-  useEffect(() => {
-    let active = true;
-    let objectUrl = '';
-
-    const requestUrl = imageUrl.startsWith('data:')
-      ? imageUrl
-      : `${imageUrl}?render=2`;
-    fetch(requestUrl, { cache: 'no-store' })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Preview request returned ${response.status}.`);
-        }
-        return response.blob();
-      })
-      .then((blob) => {
-        if (!active) return;
-        objectUrl = URL.createObjectURL(blob);
-        setRenderedImageUrl(objectUrl);
-      })
-      .catch((reason: unknown) => {
-        if (!active) return;
-        setPreviewError(
-          reason instanceof Error
-            ? reason.message
-            : 'The preview image could not be loaded.',
-        );
-      });
-
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [imageUrl]);
+  const renderedImageUrl = imageUrl.startsWith('data:')
+    ? imageUrl
+    : `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}render=3&retry=${retryKey}`;
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -1019,25 +1002,42 @@ function GeneratedResumePreview({
           <span className="result-label">GENERATED DOCUMENT</span>
           <h3>Resume preview</h3>
         </div>
-        <button type="button" onClick={() => setModalOpen(true)} disabled={!renderedImageUrl}>Expand</button>
+        <button type="button" onClick={() => setModalOpen(true)} disabled={!previewLoaded}>Expand</button>
       </div>
-      {renderedImageUrl ? (
-        <button className="preview-image-link" type="button" onClick={() => setModalOpen(true)} aria-label="Open resume preview">
-          <img src={renderedImageUrl} alt="First page of the generated resume" />
+      {!previewError && (
+        <button className={`preview-image-link ${previewLoaded ? 'is-loaded' : 'is-loading'}`} type="button" onClick={() => previewLoaded && setModalOpen(true)} aria-label="Open resume preview">
+          <img
+            src={renderedImageUrl}
+            alt="First page of the generated resume"
+            onLoad={() => setPreviewLoaded(true)}
+            onError={() => setPreviewError('The generated preview could not be rendered. The PDF may have expired or the preview service may be unavailable.')}
+          />
         </button>
-      ) : previewError ? (
+      )}
+      {previewError ? (
         <div className="preview-load-state preview-load-error">
           <strong>Preview could not load</strong>
           <p>{previewError}</p>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={() => {
+              setPreviewLoaded(false);
+              setPreviewError('');
+              setRetryKey((value) => value + 1);
+            }}
+          >
+            Retry preview
+          </button>
         </div>
-      ) : (
+      ) : !previewLoaded ? (
         <div className="preview-load-state">
           <div className="spinner" />
           <p>Rendering PDF preview…</p>
         </div>
-      )}
+      ) : null}
       <p className="preview-caption">Rendered from the compiled PDF. Select the preview to expand it.</p>
-      {modalOpen && renderedImageUrl && (
+      {modalOpen && previewLoaded && (
         <div
           className="resume-modal-backdrop"
           role="presentation"

@@ -167,7 +167,7 @@ def preview_resume_artifact(artifact_id: str) -> Response:
             if document.page_count == 0:
                 raise ValueError("PDF contains no pages")
             pixmap = document[0].get_pixmap(
-                matrix=fitz.Matrix(1.5, 1.5),
+                matrix=fitz.Matrix(2.0, 2.0),
                 alpha=False,
             )
             image_bytes = pixmap.tobytes("png")

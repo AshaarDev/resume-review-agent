@@ -60,6 +60,12 @@ class Settings:
     CREATOR_ARTIFACT_TTL_HOURS: int = int(
         os.getenv("CREATOR_ARTIFACT_TTL_HOURS", "24")
     )
+    CREATOR_MAX_REFINEMENT_PASSES: int = int(
+        os.getenv("CREATOR_MAX_REFINEMENT_PASSES", "1")
+    )
+    CREATOR_MIN_PAGE_FILL_RATIO: float = float(
+        os.getenv("CREATOR_MIN_PAGE_FILL_RATIO", "0.68")
+    )
     
     SYSTEM_PROMPT: str = """You are a helpful resume review assistant.
 

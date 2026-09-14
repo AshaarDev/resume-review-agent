@@ -82,6 +82,10 @@ class GeneratedResumeDocument(BaseModel):
     education: list[GeneratedEducationEntry] = Field(default_factory=list)
     skill_groups: list[GeneratedSkillGroup] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list, max_length=12)
+    estimated_relevant_experience_years: Optional[float] = Field(
+        default=None, ge=0, le=60
+    )
+    experience_estimate_confidence: float = Field(default=0, ge=0, le=1)
 
     @model_validator(mode="after")
     def has_resume_content(self) -> "GeneratedResumeDocument":
@@ -139,5 +143,9 @@ class CreatorAgentResult(BaseModel):
     claims_ledger: list[ClaimLedgerEntry] = Field(default_factory=list)
     artifact: Optional[ResumeArtifact] = None
     requires_user_review: bool = True
+    quality_status: Literal["passed", "needs_review", "unavailable"] = (
+        "unavailable"
+    )
+    quality_notes: list[str] = Field(default_factory=list)
     warnings: list[CreatorMessage] = Field(default_factory=list)
     errors: list[CreatorMessage] = Field(default_factory=list)
