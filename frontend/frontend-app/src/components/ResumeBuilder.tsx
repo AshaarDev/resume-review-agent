@@ -429,15 +429,12 @@ export default function ResumeBuilder({ onSendToReview, initialDraft }: { onSend
         <p className="byo-privacy">Drafts are stored in this browser, not in an account. Use Clear draft on a shared device.</p>
       </div>
       <aside ref={previewPanel} className={`byo-preview-panel${previewSize ? ' byo-preview-resized' : ''}`} style={previewSize ? { height: previewSize.height } : undefined}>
-        <div className="byo-preview-heading"><div><span className="section-kicker">HARSHIBAR TEMPLATE</span><h3>Live preview</h3></div><button className="btn btn-ghost" type="button" onClick={() => setExpanded(true)}>Expand</button></div>
-        <div className="byo-preview-tools" aria-live="polite"><span className="byo-preview-status" data-state="ready"><i aria-hidden="true" />Changes appear instantly</span><span>Live layout</span></div>
         <div className="byo-paper-stage">
           <div className="byo-paper-open" role="button" tabIndex={0} aria-label="Expand resume preview" title="Click to expand" onClick={() => setExpanded(true)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setExpanded(true); } }}>
             {paper}
             <span className="byo-paper-open-hint" aria-hidden="true">Expand preview</span>
           </div>
         </div>
-        <p className="byo-preview-note">This preview updates as you type. Click the page to expand it; prepare your downloads for the final compiled files.</p>
         <span className="byo-preview-resize" role="button" tabIndex={0} aria-label="Resize preview. Drag or use arrow keys. Double-click to reset." title="Drag to resize / double-click to reset"
         onDoubleClick={() => setPreviewSize(null)}
         onKeyDown={e => {
@@ -462,13 +459,14 @@ export default function ResumeBuilder({ onSendToReview, initialDraft }: { onSend
       ><span aria-hidden="true">&#x25E2;</span></span>
       </aside>
     </div>
-    <dialog className="byo-dialog" ref={dialog} onCancel={() => setExpanded(false)} onClick={e => { if (e.target === e.currentTarget) setExpanded(false); }}>
-      <div className="byo-dialog-header"><div><span className="section-kicker">YOUR RESUME</span><h3>Document preview</h3></div><button className="byo-dialog-close" type="button" autoFocus onClick={() => setExpanded(false)} aria-label="Close document preview"><span aria-hidden="true">×</span><span>Close</span></button></div>
+    <dialog className="byo-dialog" ref={dialog} aria-label="Resume document preview" onCancel={() => setExpanded(false)} onClick={e => { if (e.target === e.currentTarget) setExpanded(false); }}>
+      <button className="byo-dialog-close" type="button" autoFocus onClick={() => setExpanded(false)} aria-label="Close document preview"><span aria-hidden="true">×</span></button>
       <div className="byo-dialog-viewer">
-        <div className="byo-dialog-paper"><div className="byo-dialog-page" style={{ width: `${dialogZoom}%` }}>{paper}</div></div>
+        <div className="byo-dialog-paper" onMouseDown={event => { if (event.target === event.currentTarget) setExpanded(false); }}><div className="byo-dialog-page" style={{ '--document-zoom': dialogZoom / 100 } as React.CSSProperties}>{paper}</div></div>
         <aside className="byo-zoom-rail" aria-label="Preview zoom controls">
+          <button className="byo-fit-button" type="button" onClick={() => setDialogZoom(100)} aria-label="Fit resume to screen" title="Fit to screen"><span aria-hidden="true">↔</span></button>
           <button type="button" onClick={() => setDialogZoom(value => Math.min(180, value + 10))} aria-label="Zoom in">+</button>
-          <div className="byo-zoom-track"><span>180</span><input aria-label="Resume preview zoom" type="range" min="60" max="180" step="10" value={dialogZoom} onChange={event => setDialogZoom(Number(event.target.value))} /><span>60</span></div>
+          <div className="byo-zoom-track"><input aria-label="Resume preview zoom" type="range" min="60" max="180" step="10" value={dialogZoom} onChange={event => setDialogZoom(Number(event.target.value))} /></div>
           <button type="button" onClick={() => setDialogZoom(value => Math.max(60, value - 10))} aria-label="Zoom out">−</button>
           <button className="byo-zoom-value" type="button" onClick={() => setDialogZoom(100)} aria-label="Reset zoom to 100 percent">{dialogZoom}%</button>
         </aside>

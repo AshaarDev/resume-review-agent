@@ -1274,34 +1274,23 @@ function GeneratedResumePreview({
             className="resume-modal"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="resume-preview-title"
+            aria-label="Generated resume preview"
           >
-            <header className="resume-modal-header">
-              <div>
-                <span className="result-label">GENERATED DOCUMENT</span>
-                <h2 id="resume-preview-title">Resume preview</h2>
-              </div>
-              <button className="modal-close-button" type="button" autoFocus onClick={() => setModalOpen(false)} aria-label="Close resume preview"><span aria-hidden="true">×</span><span>Close</span></button>
-            </header>
+            <button className="document-modal-close" type="button" autoFocus onClick={() => setModalOpen(false)} aria-label="Close resume preview"><span aria-hidden="true">×</span></button>
             <div className="resume-modal-viewer">
-              <div className="resume-modal-canvas">
-                <img src={renderedImageUrl} alt="Generated resume" style={{ width: `${zoom}%` }} />
+              <div className="resume-modal-canvas" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalOpen(false); }}>
+                <img src={renderedImageUrl} alt="Generated resume" style={{ '--document-zoom': zoom / 100 } as React.CSSProperties} />
               </div>
               <aside className="document-zoom-rail" aria-label="Preview zoom controls">
+                <button className="document-fit-button" type="button" onClick={() => setZoom(100)} aria-label="Fit resume to screen" title="Fit to screen"><span aria-hidden="true">↔</span></button>
                 <button type="button" onClick={() => setZoom(value => Math.min(180, value + 10))} aria-label="Zoom in">+</button>
                 <div className="document-zoom-track">
-                  <span>180</span>
                   <input aria-label="Resume preview zoom" type="range" min="60" max="180" step="10" value={zoom} onChange={event => setZoom(Number(event.target.value))} />
-                  <span>60</span>
                 </div>
                 <button type="button" onClick={() => setZoom(value => Math.max(60, value - 10))} aria-label="Zoom out">−</button>
                 <button className="document-zoom-value" type="button" onClick={() => setZoom(100)} aria-label="Reset zoom to 100 percent">{zoom}%</button>
               </aside>
             </div>
-            <footer className="resume-modal-footer">
-              <span>Press Esc or select outside the window to close.</span>
-              <button className="btn btn-secondary" type="button" onClick={() => setModalOpen(false)}>Close preview</button>
-            </footer>
           </section>
         </div>,
         document.body,

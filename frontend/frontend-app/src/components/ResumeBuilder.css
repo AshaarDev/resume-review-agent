@@ -73,32 +73,20 @@ div.byo-entry-card { padding:1.2rem; }
 .byo-empty h4 { font-size:.9rem; margin-bottom:.5rem; }
 .byo-empty p { max-width:300px; color:var(--text-muted); line-height:1.7; font-size:.65rem; margin-bottom:1.2rem; }
 .byo-privacy { color:var(--text-muted); font-size:.55rem; line-height:1.6; margin:1rem .3rem; }
-.byo-preview-panel { position:sticky; top:1rem; border:1px solid var(--byo-line); border-radius:16px; background:var(--bg-secondary); overflow:hidden; }
+.byo-preview-panel { position:sticky; top:1rem; background:transparent; overflow:visible; }
 .byo-preview-resized { display:flex; flex-direction:column; }
 .byo-preview-resized .byo-paper-stage { flex:1; min-height:0; max-height:none; }
-.byo-preview-resized .byo-preview-heading,.byo-preview-resized .byo-preview-tools,.byo-preview-resized .byo-preview-note,.byo-preview-resized .byo-pages { flex-shrink:0; }
-.byo-preview-panel .byo-preview-note { padding-right:2.5rem; }
-.byo-preview-resize { position:absolute; right:3px; bottom:3px; display:grid; place-items:center; width:32px; height:32px; color:#a5a7ff; cursor:nwse-resize; touch-action:none; user-select:none; border-radius:8px; background:rgba(129,140,248,.06); }
+.byo-preview-resize { position:absolute; z-index:2; right:-9px; bottom:-9px; display:grid; place-items:center; width:30px; height:30px; color:#a5a7ff; cursor:nwse-resize; touch-action:none; user-select:none; border:1px solid rgba(129,140,248,.16); border-radius:9px; background:rgba(17,17,25,.7); opacity:.28; backdrop-filter:blur(10px); transition:opacity .18s,background .18s,color .18s; }
+.byo-preview-panel:hover .byo-preview-resize,.byo-preview-resize:focus-visible { opacity:1; }
 .byo-preview-resize:hover { background:rgba(129,140,248,.2); color:#dddfff; }
 .byo-preview-resize:focus-visible { outline:2px solid #a5b4fc; outline-offset:-2px; }
-.byo-preview-heading { display:flex; justify-content:space-between; align-items:center; gap:.7rem; padding:1rem; }
-.byo-preview-heading .section-kicker { font-size:.48rem; }
-.byo-preview-heading h3 { font-size:.85rem; margin:.4rem 0 0; }
-.byo-preview-heading .btn { font-size:.6rem; padding:.5rem; }
-.byo-preview-tools { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.7rem 1rem; border-block:1px solid var(--byo-line); font-size:.52rem; color:var(--text-muted); }
-.byo-preview-tools button { color:#a5a7ff; background:transparent; cursor:pointer; font-size:.55rem; }
-.byo-preview-status { display:flex; align-items:center; gap:.4rem; min-width:0; }
-.byo-preview-status i { width:6px; height:6px; flex-shrink:0; border-radius:50%; background:#34d399; box-shadow:0 0 8px rgba(52,211,153,.45); }
-.byo-preview-status[data-state="queued"] i,.byo-preview-status[data-state="rendering"] i { background:#a5b4fc; box-shadow:0 0 8px rgba(165,180,252,.55); animation:byo-preview-pulse .9s ease-in-out infinite alternate; }
-.byo-preview-status[data-state="error"] i { background:#f59e0b; box-shadow:0 0 8px rgba(245,158,11,.45); }
-@keyframes byo-preview-pulse { to { opacity:.35; transform:scale(.72); } }
-.byo-paper-stage { padding:1rem; max-height:70vh; overflow:auto; overscroll-behavior:contain; scrollbar-color:rgba(139,142,255,.72) rgba(255,255,255,.035); scrollbar-width:thin; background:radial-gradient(ellipse at top,rgba(99,102,241,.08),transparent),#111119; }
+.byo-paper-stage { padding:0; max-height:78vh; overflow:auto; overscroll-behavior:contain; scrollbar-color:rgba(139,142,255,.72) transparent; scrollbar-width:thin; background:transparent; }
 .byo-paper-stage::-webkit-scrollbar,.byo-dialog-paper::-webkit-scrollbar { width:10px; height:10px; }
-.byo-paper-stage::-webkit-scrollbar-track,.byo-dialog-paper::-webkit-scrollbar-track { background:rgba(255,255,255,.025); }
-.byo-paper-stage::-webkit-scrollbar-thumb,.byo-dialog-paper::-webkit-scrollbar-thumb { border:3px solid #111119; border-radius:999px; background:linear-gradient(180deg,#9a9cff,#6569dd); }
+.byo-paper-stage::-webkit-scrollbar-track,.byo-dialog-paper::-webkit-scrollbar-track { background:transparent; }
+.byo-paper-stage::-webkit-scrollbar-thumb,.byo-dialog-paper::-webkit-scrollbar-thumb { border:3px solid transparent; border-radius:999px; background:rgba(151,145,225,.62); background-clip:padding-box; }
 .byo-paper-stage::-webkit-scrollbar-thumb:hover,.byo-dialog-paper::-webkit-scrollbar-thumb:hover { background:linear-gradient(180deg,#b5b6ff,#7d80ee); }
-.byo-paper-open { position:relative; cursor:zoom-in; border-radius:2px; transition:transform .2s ease,box-shadow .2s ease; }
-.byo-paper-open:hover { transform:translateY(-2px); box-shadow:0 14px 35px rgba(0,0,0,.3); }
+.byo-paper-open { position:relative; cursor:zoom-in; border-radius:2px; filter:drop-shadow(0 18px 38px rgba(0,0,0,.32)); transition:transform .2s ease,filter .2s ease; }
+.byo-paper-open:hover { transform:translateY(-3px) scale(1.006); filter:drop-shadow(0 24px 48px rgba(0,0,0,.46)); }
 .byo-paper-open:focus-visible { outline:2px solid #a5b4fc; outline-offset:4px; }
 .byo-paper-open-hint { position:absolute; right:.7rem; bottom:.7rem; padding:.4rem .55rem; border:1px solid rgba(255,255,255,.2); border-radius:7px; background:rgba(15,15,25,.88); color:#eef; font-size:.5rem; opacity:0; transform:translateY(4px); transition:opacity .18s,transform .18s; pointer-events:none; }
 .byo-paper-open:hover .byo-paper-open-hint,.byo-paper-open:focus-visible .byo-paper-open-hint { opacity:1; transform:none; }
@@ -119,29 +107,27 @@ div.byo-entry-card { padding:1.2rem; }
 .byo-paper-placeholder span { font-size:8px; letter-spacing:2px; }
 .byo-preview-note { font-size:.52rem; line-height:1.6; color:var(--text-muted); margin:0; padding:.8rem 1rem; }
 .byo-pages { display:flex; justify-content:center; align-items:center; gap:1rem; font-size:.6rem; }
-.byo-dialog { margin:auto; padding:0; width:min(900px,94vw); height:min(92dvh,1050px); max-height:calc(100dvh - 2rem); overflow:hidden; border:1px solid rgba(139,142,255,.25); border-radius:20px; background:rgba(20,20,30,.98); color:var(--text-primary); box-shadow:0 35px 110px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.025) inset; }
-.byo-dialog[open] { display:flex; flex-direction:column; animation:byo-dialog-in .18s ease-out; }
-.byo-dialog::backdrop { background:rgba(5,5,12,.86); backdrop-filter:blur(12px); animation:byo-backdrop-in .16s ease-out; }
+.byo-dialog { margin:auto; padding:0; width:100vw; max-width:none; height:100dvh; max-height:none; overflow:hidden; border:0; background:transparent; color:var(--text-primary); }
+.byo-dialog[open] { display:block; animation:byo-dialog-in .18s ease-out; }
+.byo-dialog::backdrop { background:rgba(5,5,12,.78); backdrop-filter:blur(9px); animation:byo-backdrop-in .16s ease-out; }
 body:has(.byo-dialog[open]) { overflow:hidden; }
-.byo-dialog-header { display:flex; flex:0 0 auto; justify-content:space-between; align-items:center; padding:1rem 1.3rem; border-bottom:1px solid var(--byo-line); background:linear-gradient(90deg,rgba(99,102,241,.08),transparent 45%),var(--bg-secondary); }
-.byo-dialog-header h3 { margin:.3rem 0 0; font-size:1rem; }
-.byo-dialog-close { display:inline-flex; height:34px; align-items:center; gap:.42rem; padding:0 .75rem!important; border:1px solid var(--byo-line); border-radius:9px; background:rgba(255,255,255,.035)!important; color:var(--text-secondary)!important; font-size:.66rem!important; font-weight:700; }
-.byo-dialog-close span:first-child { font-size:1rem; font-weight:400; line-height:1; }
-.byo-dialog-close:hover { border-color:rgba(139,142,255,.45); background:rgba(99,102,241,.13)!important; color:#fff!important; }
-.byo-dialog-viewer { display:grid; min-height:0; flex:1 1 auto; grid-template-columns:minmax(0,1fr) 64px; background:#111119; }
-.byo-dialog-paper { min-height:0; overflow:auto; padding:1.5rem; overscroll-behavior:contain; scrollbar-color:rgba(139,142,255,.72) rgba(255,255,255,.035); scrollbar-width:thin; background:radial-gradient(ellipse at top,rgba(99,102,241,.08),transparent 45%),#111119; }
-.byo-dialog-page { min-width:0; margin:auto; transition:width .18s cubic-bezier(.22,1,.36,1); }
+.byo-dialog-close { position:absolute; z-index:4; top:1.25rem; right:1.4rem; display:grid; width:42px; height:42px; place-items:center; padding:0!important; border:1px solid rgba(139,142,255,.3); border-radius:12px; background:rgba(16,16,25,.74)!important; box-shadow:0 10px 30px rgba(0,0,0,.28); color:#e7e5ff!important; font-size:1.45rem!important; cursor:pointer; backdrop-filter:blur(14px); transition:border-color .16s,background .16s,transform .16s; }
+.byo-dialog-close:hover { border-color:rgba(167,169,255,.65); background:rgba(99,102,241,.24)!important; transform:translateY(-1px); }
+.byo-dialog-viewer { position:relative; width:100%; height:100%; }
+.byo-dialog-paper { position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; overflow:auto; padding:1.5rem 6.5rem 1.5rem 1.5rem; overscroll-behavior:contain; scrollbar-color:rgba(151,145,225,.65) transparent; scrollbar-width:thin; background:transparent; }
+.byo-dialog-paper::-webkit-scrollbar-track { background:transparent; }
+.byo-dialog-paper::-webkit-scrollbar-thumb { border-color:transparent; background:rgba(151,145,225,.62); background-clip:padding-box; }
+.byo-dialog-page { width:min(720px,calc(100vw - 10rem),calc((100dvh - 3rem) * .7727)); min-width:280px; margin:0 auto; zoom:var(--document-zoom,1); }
 .byo-dialog-paper .byo-paper { font-size:13px; min-height:850px; }
 .byo-dialog-paper .byo-paper header h2 { font-size:36px; }
 .byo-dialog-paper .byo-paper section h3 { font-size:17px; }
 .byo-dialog-paper .byo-paper header p,.byo-dialog-paper .byo-paper-entry > div > span { font-size:12px; }
 .byo-workspace button:focus-visible,.byo-dialog button:focus-visible { outline:2px solid #a5b4fc; outline-offset:3px; }
-.byo-zoom-rail { z-index:1; display:flex; min-height:0; flex-direction:column; align-items:center; justify-content:center; gap:.7rem; padding:.8rem .55rem; border-left:1px solid var(--byo-line); background:linear-gradient(180deg,rgba(99,102,241,.1),transparent 28%),var(--bg-secondary); box-shadow:-12px 0 28px rgba(0,0,0,.18); }
-.byo-zoom-rail button { display:grid; width:34px; height:34px; place-items:center; padding:0!important; border:1px solid var(--byo-line); border-radius:10px; background:rgba(255,255,255,.035); color:var(--text-secondary); font-size:1rem; cursor:pointer; transition:background .15s,border-color .15s,color .15s,transform .15s; }
+.byo-zoom-rail { position:absolute; z-index:3; top:50%; right:1.35rem; display:flex; flex-direction:column; align-items:center; gap:.5rem; padding:0; background:transparent; transform:translateY(-50%); }
+.byo-zoom-rail button { display:grid; width:34px; height:34px; place-items:center; padding:0!important; border:1px solid rgba(139,142,255,.28); border-radius:10px; background:rgba(16,16,25,.72); box-shadow:0 8px 24px rgba(0,0,0,.24); color:#dddafe; font-size:1rem; cursor:pointer; backdrop-filter:blur(14px); transition:background .15s,border-color .15s,color .15s,transform .15s; }
 .byo-zoom-rail button:hover { border-color:rgba(139,142,255,.5); background:rgba(99,102,241,.15); color:#fff; transform:translateY(-1px); }
-.byo-zoom-track { display:flex; min-height:180px; flex-direction:column; align-items:center; gap:.45rem; }
-.byo-zoom-track span { color:var(--text-muted); font-size:.45rem; font-variant-numeric:tabular-nums; }
-.byo-zoom-track input { width:5px; min-height:145px; flex:1; accent-color:#8b8eff; cursor:ns-resize; direction:rtl; writing-mode:vertical-lr; }
+.byo-zoom-track { display:flex; min-height:158px; flex-direction:column; align-items:center; justify-content:center; padding:.8rem .82rem; border:1px solid rgba(139,142,255,.22); border-radius:12px; background:rgba(16,16,25,.64); box-shadow:0 10px 28px rgba(0,0,0,.22); backdrop-filter:blur(14px); }
+.byo-zoom-track input { width:6px; height:132px; min-height:132px; margin:0; accent-color:#8b8eff; cursor:ns-resize; direction:rtl; writing-mode:vertical-lr; }
 .byo-zoom-rail .byo-zoom-value { width:42px; height:26px; border-color:rgba(139,142,255,.24); color:#afb1ff; font-size:.52rem; font-weight:700; }
 @keyframes byo-backdrop-in { from { opacity:0; } to { opacity:1; } }
 @keyframes byo-dialog-in { from { opacity:0; transform:translateY(12px) scale(.985); } to { opacity:1; transform:none; } }
@@ -164,4 +150,4 @@ body:has(.byo-dialog[open]) { overflow:hidden; }
 @media(max-width:1050px) { .byo-grid { grid-template-columns:1fr; } .byo-preview-panel { position:static; width:min(500px,100%); justify-self:center; } }
 @media(max-width:620px) { .byo-intro { flex-direction:column; } .byo-fields { grid-template-columns:1fr; gap:0; } .byo-section-heading { align-items:start; flex-direction:column; } .byo-toolbar,.byo-downloads { flex-wrap:wrap; } .byo-toolbar > div { flex-wrap:wrap; } .byo-dialog-paper { padding:.6rem; } .byo-dialog-paper .byo-paper { font-size:10px; min-height:520px; } .byo-dialog-paper .byo-paper header h2 { font-size:26px; } .byo-dialog-paper .byo-paper section h3 { font-size:12px; } .byo-dialog-paper .byo-paper header p,.byo-dialog-paper .byo-paper-entry > div > span { font-size:9px; } }
 @media(max-width:620px) { .byo-dialog-paper .byo-paper { font-size:1.50cqw; min-height:0; } .byo-dialog-paper .byo-paper header h2 { font-size:3.60cqw; } .byo-dialog-paper .byo-paper section h3 { font-size:1.72cqw; } .byo-dialog-paper .byo-paper header p { font-size:1.39cqw; } .byo-dialog-paper .byo-paper-entry > div > span { font-size:1.57cqw; } }
-@media(max-width:620px) { .byo-dialog { width:100vw; height:100dvh; max-height:100dvh; border:0; border-radius:0; } .byo-dialog-viewer { grid-template-columns:minmax(0,1fr) 52px; } .byo-dialog-paper { padding:.65rem; } .byo-zoom-rail { padding:.55rem .35rem; } .byo-zoom-rail button { width:32px; height:32px; } .byo-zoom-track { min-height:150px; } .byo-zoom-track input { min-height:115px; } .byo-dialog-close span:last-child { display:none; } }
+@media(max-width:620px) { .byo-dialog-paper { padding:.75rem 4.5rem .75rem .75rem; } .byo-dialog-page { width:min(720px,calc(100vw - 5.25rem),calc((100dvh - 1.5rem) * .7727)); min-width:220px; } .byo-zoom-rail { right:.65rem; } .byo-zoom-rail button { width:32px; height:32px; } .byo-zoom-track { min-height:140px; padding:.65rem .72rem; } .byo-zoom-track input { height:112px; min-height:112px; } .byo-dialog-close { top:.65rem; right:.65rem; width:38px; height:38px; } }
