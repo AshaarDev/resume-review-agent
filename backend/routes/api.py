@@ -1,7 +1,12 @@
 """API routes for independent and unified resume reviews."""
 
+import asyncio
+import json
+from datetime import datetime, timezone
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from core.models import (
     ChatRequest,
@@ -102,23 +107,7 @@ def analyze_resume_visual(request: VisualReviewRequest) -> VisualReviewResponse:
 def create_resume_workflow(request: ResumeWorkflowRequest) -> ResumeWorkflowResponse:
     """Route review and creation requests through the shared LangGraph."""
     try:
-        if request.intent.value != "review":
-            return run_resume_workflow(
-                intent=request.intent,
-                job_description=request.job_description,
-                user_instructions=request.user_instructions,
-                creation_brief=request.creation_brief,
-            )
-        file_bytes, file_type = _decode_request(
-            request.file_base64 or "", request.file_type or ""
-        )
-        return run_resume_workflow(
-            intent=request.intent,
-            file_bytes=file_bytes,
-            file_type=file_type,
-            job_description=request.job_description,
-            user_instructions=request.user_instructions,
-        )
+        return run_resume_workflow(**_workflow_arguments(request))
     except DocumentProcessingError:
         # Already handled by _decode_request
         raise
@@ -127,6 +116,104 @@ def create_resume_workflow(request: ResumeWorkflowRequest) -> ResumeWorkflowResp
             status_code=500,
             detail="The workflow could not be started. Please try again.",
         ) from exc
+
+
+def _workflow_arguments(request: ResumeWorkflowRequest) -> dict[str, Any]:
+    arguments: dict[str, Any] = {
+        "intent": request.intent,
+        "job_description": request.job_description,
+        "user_instructions": request.user_instructions,
+    }
+    if request.intent.value == "review":
+        file_bytes, file_type = _decode_request(
+            request.file_base64 or "", request.file_type or ""
+        )
+        arguments.update(file_bytes=file_bytes, file_type=file_type)
+    else:
+        arguments["creation_brief"] = request.creation_brief
+    return arguments
+
+
+def _encode_sse(event_name: str, payload: dict[str, Any]) -> str:
+    return (
+        f"event: {event_name}\n"
+        f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
+    )
+
+
+@router.post("/resume-workflows/stream")
+async def stream_resume_workflow(
+    request: ResumeWorkflowRequest,
+) -> StreamingResponse:
+    """Stream sanitized, request-scoped workflow events and the final result."""
+
+    arguments = _workflow_arguments(request)
+
+    async def event_stream():
+        queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        sequence = 0
+
+        def event_sink(event: dict[str, Any]) -> None:
+            nonlocal sequence
+            sequence += 1
+            payload = {
+                "sequence": sequence,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **event,
+            }
+            loop.call_soon_threadsafe(
+                queue.put_nowait, ("progress", payload)
+            )
+
+        async def execute() -> None:
+            try:
+                result = await asyncio.to_thread(
+                    run_resume_workflow,
+                    **arguments,
+                    event_sink=event_sink,
+                )
+                await queue.put(("result", result.model_dump(mode="json")))
+            except Exception:
+                await queue.put(
+                    (
+                        "error",
+                        {
+                            "code": "WORKFLOW_STREAM_FAILED",
+                            "message": (
+                                "The workflow stream stopped unexpectedly. "
+                                "Please try again."
+                            ),
+                        },
+                    )
+                )
+
+        worker = asyncio.create_task(execute())
+        try:
+            while True:
+                try:
+                    event_name, payload = await asyncio.wait_for(
+                        queue.get(), timeout=15
+                    )
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
+                yield _encode_sse(event_name, payload)
+                if event_name in {"result", "error"}:
+                    break
+        finally:
+            if not worker.done():
+                worker.cancel()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/artifacts/{artifact_id}/{filename}")

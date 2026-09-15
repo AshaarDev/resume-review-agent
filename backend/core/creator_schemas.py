@@ -1,4 +1,4 @@
-"""Contracts for factual resume creation, artifacts, and Creator Agent output."""
+"""Contracts for assisted resume creation, artifacts, and Creator Agent output."""
 
 from enum import Enum
 from typing import Literal, Optional
@@ -36,6 +36,8 @@ class GeneratedResumeBullet(BaseModel):
     text: str = Field(min_length=1, max_length=700)
     bold_phrases: list[str] = Field(default_factory=list, max_length=4)
     source_fact_ids: list[str] = Field(min_length=1, max_length=8)
+    is_mock: bool = False
+    mock_reason: Optional[str] = Field(default=None, max_length=240)
 
 
 class GeneratedResumeEntry(BaseModel):
@@ -54,6 +56,8 @@ class GeneratedProjectEntry(BaseModel):
     url: Optional[str] = Field(default=None, max_length=500)
     source_fact_ids: list[str] = Field(min_length=1, max_length=8)
     bullets: list[GeneratedResumeBullet] = Field(min_length=1, max_length=6)
+    is_mock: bool = False
+    mock_reason: Optional[str] = Field(default=None, max_length=240)
 
 
 class GeneratedEducationEntry(BaseModel):
@@ -110,6 +114,7 @@ class ClaimLedgerEntry(BaseModel):
     section: str
     generated_text: str
     source_fact_ids: list[str]
+    is_mock: bool = False
 
 
 class CompilationStatus(str, Enum):
@@ -148,5 +153,8 @@ class CreatorAgentResult(BaseModel):
         "unavailable"
     )
     quality_notes: list[str] = Field(default_factory=list)
+    refinement_passes: int = Field(default=0, ge=0)
+    final_page_count: Optional[int] = Field(default=None, ge=0)
+    page_fill_ratio: Optional[float] = Field(default=None, ge=0, le=1)
     warnings: list[CreatorMessage] = Field(default_factory=list)
     errors: list[CreatorMessage] = Field(default_factory=list)

@@ -91,6 +91,42 @@ def test_create_intent_does_not_require_upload(monkeypatch):
     assert "file_bytes" not in captured
 
 
+def test_workflow_sse_streams_real_progress_before_result(monkeypatch):
+    def fake(event_sink=None, **kwargs):
+        event_sink(
+            {
+                "phase": "pdf_compilation",
+                "status": "completed",
+                "message": "PDF compilation completed.",
+                "details": {"pass": 1},
+            }
+        )
+        return _response().model_copy(update={"intent": WorkflowIntent.CREATE})
+
+    monkeypatch.setattr(api, "run_resume_workflow", fake)
+    with client.stream(
+        "POST",
+        "/api/resume-workflows/stream",
+        json={
+            "intent": "create",
+            "creation_brief": {
+                "full_name": "Ada Lovelace",
+                "source_facts": [
+                    {"fact_id": "fact-1", "text": "Built an engine."}
+                ],
+            },
+        },
+    ) as response:
+        body = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: progress" in body
+    assert '"phase":"pdf_compilation"' in body
+    assert body.index("event: progress") < body.index("event: result")
+    assert '"sequence":1' in body
+
+
 def test_artifact_download_is_allowlisted(monkeypatch, tmp_path):
     artifact_id = "a" * 32
     artifact_dir = tmp_path / artifact_id

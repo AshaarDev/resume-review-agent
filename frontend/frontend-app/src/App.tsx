@@ -1,12 +1,54 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import ResumeBuilder from './components/ResumeBuilder';
+import type { ResumeBuilderDraft, ResumeBuilderEntry } from './components/ResumeBuilder';
+import ResumeGuide from './components/ResumeGuide';
 import { analyzeResume, artifactUrl, createResume } from './services/api';
-import type { ReviewAgentResult, WorkflowResponse } from './types';
+import type { GeneratedResumeDocument, ReviewAgentResult, WorkflowProgressEvent, WorkflowResponse } from './types';
 import './App.css';
 
 type Route = 'landing' | 'signin' | 'workspace';
 type WorkspaceMode = 'review' | 'create';
+
+function markGeneratedFormatting(text: string, phrases: string[]): string {
+  return [...new Set(phrases.filter(Boolean))]
+    .sort((left, right) => right.length - left.length)
+    .reduce((value, phrase) => value.replaceAll(phrase, `**${phrase}**`), text);
+}
+
+function createdResumeToBuilderDraft(
+  document: GeneratedResumeDocument,
+  contact: { full_name: string; email: string; phone: string; location: string },
+): ResumeBuilderDraft {
+  const entry = (values: Partial<ResumeBuilderEntry>): ResumeBuilderEntry => ({
+    id: crypto.randomUUID(), name: '', title: '', location: '', dates: '',
+    stack: '', coursework: '', points: [], skills: [], ...values,
+  });
+  const point = (bullet: GeneratedResumeDocument['experiences'][number]['bullets'][number]) =>
+    `${bullet.is_mock ? '[AI DRAFT — EDIT] ' : ''}${markGeneratedFormatting(bullet.text, bullet.bold_phrases)}`;
+  return {
+    ...contact,
+    experiences: document.experiences.map(item => entry({
+      name: item.organization, title: item.role, location: item.location,
+      dates: item.date_range, points: item.bullets.map(point),
+    })),
+    projects: document.projects.map(item => entry({
+      name: `${item.is_mock ? '[AI DRAFT] ' : ''}${item.name}`,
+      stack: item.stack, dates: item.date_range,
+      points: item.bullets.map(point),
+    })),
+    education: document.education.map(item => entry({
+      name: item.institution, title: item.degree, location: item.location,
+      dates: item.date_range, coursework: item.details.join(', '),
+    })),
+    skill_groups: document.skill_groups.map(item => entry({
+      name: item.label, skills: item.skills,
+    })),
+    custom_sections: [],
+    section_order: ['skill_groups', 'experiences', 'projects', 'education'],
+  };
+}
 
 const SAMPLE_CREATOR_FACTS = [
   'Worked at Northstar Labs as a Software Engineer from January 2023 to Present in Toronto, Ontario.',
@@ -224,7 +266,7 @@ const MOCK_CREATOR_WORKFLOW: WorkflowResponse = {
   intent: 'create',
   status: 'completed',
   final_message:
-    'Your grounded resume draft was created successfully. Review each claim before using it.',
+    'Your complete AI-assisted resume draft was created successfully. Edit every mock claim before using it.',
   summary: null,
   review: null,
   creation: {
@@ -243,8 +285,10 @@ const MOCK_CREATOR_WORKFLOW: WorkflowResponse = {
         date_range: 'Jan 2023 – Present',
         source_fact_ids: ['fact-1', 'fact-2', 'fact-3'],
         bullets: [
-          { text: 'Reduced API response time by 42% by introducing Redis caching and optimizing PostgreSQL queries.', bold_phrases: ['42%'], source_fact_ids: ['fact-2'] },
-          { text: 'Cut release time from 45 to 12 minutes by automating delivery workflows with GitHub Actions.', bold_phrases: ['45 to 12 minutes'], source_fact_ids: ['fact-3'] },
+          { text: 'Reduced API response time by 42% by introducing Redis caching and optimizing PostgreSQL queries.', bold_phrases: ['42%'], source_fact_ids: ['fact-2'], is_mock: false, mock_reason: null },
+          { text: 'Cut release time from 45 to 12 minutes by automating delivery workflows with GitHub Actions.', bold_phrases: ['45 to 12 minutes'], source_fact_ids: ['fact-3'], is_mock: false, mock_reason: null },
+          { text: 'Improved service reliability to 99.9% by introducing health checks and production monitoring.', bold_phrases: ['99.9%'], source_fact_ids: ['fact-1'], is_mock: true, mock_reason: 'Sample reliability metric and monitoring responsibility.' },
+          { text: 'Led code reviews for a team of 5 developers, reducing production defects by 25%.', bold_phrases: ['team of 5', '25%'], source_fact_ids: ['fact-1'], is_mock: true, mock_reason: 'Sample team size and quality outcome.' },
         ],
       }],
       projects: [],
@@ -266,14 +310,18 @@ const MOCK_CREATOR_WORKFLOW: WorkflowResponse = {
       experience_estimate_confidence: 0.9,
     },
     claims_ledger: [
-      { section: 'experience', generated_text: 'Reduced API response time by 42%.', source_fact_ids: ['fact-2'] },
-      { section: 'experience', generated_text: 'Cut release time from 45 to 12 minutes.', source_fact_ids: ['fact-3'] },
-      { section: 'education', generated_text: 'Bachelor of Science in Computer Science.', source_fact_ids: ['fact-6'] },
+      { section: 'experience', generated_text: 'Reduced API response time by 42%.', source_fact_ids: ['fact-2'], is_mock: false },
+      { section: 'experience', generated_text: 'Cut release time from 45 to 12 minutes.', source_fact_ids: ['fact-3'], is_mock: false },
+      { section: 'experience', generated_text: 'Improved service reliability to 99.9%.', source_fact_ids: ['fact-1'], is_mock: true },
+      { section: 'education', generated_text: 'Bachelor of Science in Computer Science.', source_fact_ids: ['fact-6'], is_mock: false },
     ],
     artifact: null,
     requires_user_review: true,
     quality_status: 'passed',
     quality_notes: [],
+    refinement_passes: 2,
+    final_page_count: 1,
+    page_fill_ratio: 0.82,
     warnings: [{
       code: 'CREATOR_MISSING_INFORMATION',
       message: 'Confirm the preferred LinkedIn URL.',
@@ -502,6 +550,8 @@ function SignInPage({ navigate }: { navigate: (path: string) => void }) {
 
 function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
   const [buildMode, setBuildMode] = useState(false);
+  const [guideMode, setGuideMode] = useState(false);
+  const [builderImport, setBuilderImport] = useState<{ draft: ResumeBuilderDraft; version: number } | null>(null);
   const [mode, setMode] = useState<WorkspaceMode>('review');
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -521,6 +571,9 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
     review: '',
     create: '',
   });
+  const [activityEvents, setActivityEvents] = useState<
+    Record<WorkspaceMode, WorkflowProgressEvent[]>
+  >({ review: [], create: [] });
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -530,12 +583,13 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
   const [facts, setFacts] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const activeModeRef = useRef<WorkspaceMode | 'build'>(mode);
+  const activeModeRef = useRef<WorkspaceMode | 'build' | 'guide'>(mode);
   const [resultRevealSequence, setResultRevealSequence] = useState(0);
   const workflow = workflows[mode];
   const loading = loadingStates[mode];
   const error = errors[mode];
   const { jobDescription, instructions } = contexts[mode];
+  const showWorkflowFocus = loading || Boolean(error) || Boolean(workflow);
 
   const setWorkflowFor = (
     target: WorkspaceMode,
@@ -545,6 +599,17 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
     setLoadingStates((current) => ({ ...current, [target]: value }));
   const setErrorFor = (target: WorkspaceMode, value: string) =>
     setErrors((current) => ({ ...current, [target]: value }));
+  const resetActivityFor = (target: WorkspaceMode) =>
+    setActivityEvents((current) => ({ ...current, [target]: [] }));
+  const appendActivityFor = (
+    target: WorkspaceMode,
+    event: WorkflowProgressEvent,
+  ) => setActivityEvents((current) => ({
+    ...current,
+    [target]: current[target].some(item => item.sequence === event.sequence)
+      ? current[target]
+      : [...current[target], event],
+  }));
   const setContextFor = (
     target: WorkspaceMode,
     field: 'jobDescription' | 'instructions',
@@ -556,8 +621,8 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
     }));
 
   useEffect(() => {
-    activeModeRef.current = buildMode ? 'build' : mode;
-  }, [mode, buildMode]);
+    activeModeRef.current = guideMode ? 'guide' : buildMode ? 'build' : mode;
+  }, [mode, buildMode, guideMode]);
 
   useEffect(() => {
     if (resultRevealSequence === 0) return;
@@ -574,6 +639,19 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
     return () => window.cancelAnimationFrame(frame);
   }, [resultRevealSequence]);
 
+  useEffect(() => {
+    if (!loading || activeModeRef.current !== mode) return;
+    const frame = window.requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'auto'
+          : 'smooth',
+        block: 'start',
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, mode]);
+
   const revealWorkflow = (
     target: WorkspaceMode,
     value: WorkflowResponse,
@@ -586,13 +664,38 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
 
   const changeMode = (next: WorkspaceMode) => {
     setBuildMode(false);
+    setGuideMode(false);
     setMode(next);
+  };
+
+  const openBuilder = () => {
+    setGuideMode(false);
+    setBuildMode(true);
+  };
+
+  const openGuide = () => {
+    setBuildMode(false);
+    setGuideMode(true);
+  };
+
+  const editCreatedResume = (document: GeneratedResumeDocument) => {
+    setBuilderImport({
+      draft: createdResumeToBuilderDraft(document, {
+        full_name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        location: location.trim(),
+      }),
+      version: Date.now(),
+    });
+    openBuilder();
   };
 
   const reviewFile = async (candidate: File) => {
     setLoadingFor('review', true);
     setWorkflowFor('review', null);
     setErrorFor('review', '');
+    resetActivityFor('review');
     try {
       revealWorkflow(
         'review',
@@ -600,6 +703,7 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
           candidate,
           contexts.review.jobDescription,
           contexts.review.instructions,
+          event => appendActivityFor('review', event),
         ),
       );
     } catch (reason) {
@@ -618,6 +722,7 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
     setFile(candidate);
     activeModeRef.current = 'review';
     setBuildMode(false);
+    setGuideMode(false);
     setMode('review');
     await reviewFile(candidate);
   };
@@ -644,6 +749,7 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
     setLoadingFor('create', true);
     setWorkflowFor('create', null);
     setErrorFor('create', '');
+    resetActivityFor('create');
     try {
       revealWorkflow(
         'create',
@@ -655,7 +761,8 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
           links: parsedLinks,
           target_role: targetRole.trim() || undefined,
           source_facts: sourceFacts.map((text, index) => ({ fact_id: `fact-${index + 1}`, text })),
-        }, contexts.create.jobDescription, contexts.create.instructions),
+        }, contexts.create.jobDescription, contexts.create.instructions,
+        event => appendActivityFor('create', event)),
       );
     } catch (reason) {
       setErrorFor('create', reason instanceof Error ? reason.message : 'The creation workflow could not be completed.');
@@ -684,14 +791,18 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
         <div className="sidebar-header"><Logo onClick={() => navigate('/')} /></div>
         <nav className="sidebar-nav" aria-label="Resume workflows">
           <span className="nav-section-title">WORKSPACE</span>
-          <button className={`nav-item ${!buildMode && mode === 'review' ? 'active' : ''}`} onClick={() => changeMode('review')}>
+          <button className={`nav-item ${!buildMode && !guideMode && mode === 'review' ? 'active' : ''}`} onClick={() => changeMode('review')}>
             <span className="nav-item-icon">◎</span><span>Review Resume</span>{workflows.review && <small>SAVED</small>}
           </button>
-          <button className={`nav-item ${!buildMode && mode === 'create' ? 'active' : ''}`} onClick={() => changeMode('create')}>
+          <button className={`nav-item ${!buildMode && !guideMode && mode === 'create' ? 'active' : ''}`} onClick={() => changeMode('create')}>
             <span className="nav-item-icon">✦</span><span>Create Resume</span><small>{workflows.create ? 'SAVED' : 'NEW'}</small>
           </button>
-          <button className={`nav-item ${buildMode ? 'active' : ''}`} onClick={() => setBuildMode(true)}>
+          <button className={`nav-item ${buildMode && !guideMode ? 'active' : ''}`} onClick={openBuilder}>
             <span className="nav-item-icon">+</span><span>BUILD YOUR OWN</span><small>NEW</small>
+          </button>
+          <span className="nav-section-title nav-section-secondary">LEARN</span>
+          <button className={`nav-item ${guideMode ? 'active' : ''}`} onClick={openGuide}>
+            <span className="nav-item-icon">?</span><span>Resume Field Guide</span><small>6 STEPS</small>
           </button>
         </nav>
         <div className="sidebar-footer">
@@ -702,23 +813,50 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
 
       <main className="main-content">
         <header className="app-header">
-          <div><span className="header-kicker">RESUME WORKSPACE</span><h1>{buildMode ? 'Build Your Own' : mode === 'review' ? 'Review Resume' : 'Create Resume'}</h1></div>
-          <div className="system-status"><span /> {buildMode ? 'Manual resume studio' : 'AI workflow online'}</div>
+          <div><span className="header-kicker">{guideMode ? 'LEARNING STUDIO' : 'RESUME WORKSPACE'}</span><h1>{guideMode ? 'Resume Field Guide' : buildMode ? 'Build Your Own' : mode === 'review' ? 'Review Resume' : 'Create Resume'}</h1></div>
+          <div className="system-status"><span /> {guideMode ? 'Interactive course' : buildMode ? 'Manual resume studio' : 'AI workflow online'}</div>
         </header>
 
         <div className="page-content">
-          <div hidden={!buildMode}><ResumeBuilder onSendToReview={reviewBuilderResume} /></div>
-          <div hidden={buildMode}>
+          <div hidden={!guideMode}><ResumeGuide onOpenBuilder={openBuilder} onOpenReview={() => changeMode('review')} /></div>
+          <div hidden={!buildMode || guideMode}><ResumeBuilder key={builderImport?.version ?? 'manual-draft'} onSendToReview={reviewBuilderResume} initialDraft={builderImport?.draft} /></div>
+          <div hidden={buildMode || guideMode}>
           <div className="page-intro">
             <div>
               <span className="section-kicker">{mode === 'review' ? 'MULTI-MODEL ANALYSIS' : 'GROUNDED GENERATION'}</span>
-              <h2>{mode === 'review' ? 'Get a complete resume review' : 'Create from verified facts'}</h2>
+              <h2>{mode === 'review' ? 'Get a complete resume review' : 'Create a complete AI-assisted draft'}</h2>
               <p>{mode === 'review'
                 ? 'Upload your resume. Content, visual, and layout branches run independently and combine into prioritized actions.'
-                : 'Provide only facts you can verify. The creator agent turns them into a polished LaTeX resume without inventing experience.'}</p>
+                : 'Give the creator your starting details. It builds a full one-page LaTeX resume and adds editable mock achievement bullets wherever more depth is needed.'}</p>
             </div>
             {mode === 'create' && <button className="btn btn-secondary" type="button" onClick={fillSample}>Autofill sample</button>}
           </div>
+
+          {showWorkflowFocus && (
+            <div className="workflow-focus" ref={resultsRef}>
+              {loading && <ProcessingPanel mode={mode} events={activityEvents[mode]} />}
+              {error && <div className="error-banner" role="alert"><strong>Workflow error</strong><span>{error}</span></div>}
+              {workflow && (
+                <div
+                  className="result-anchor"
+                  key={`${workflow.workflow_id}-${resultRevealSequence}`}
+                >
+                  <WorkflowResults workflow={workflow} onEditCreation={editCreatedResume} />
+                </div>
+              )}
+              {workflow && activityEvents[mode].length > 0 && (
+                <CompletedActivityLog events={activityEvents[mode]} />
+              )}
+            </div>
+          )}
+
+          <div className={`workflow-inputs ${showWorkflowFocus ? 'workflow-inputs-secondary' : ''}`}>
+          {showWorkflowFocus && (
+            <div className="workflow-inputs-heading">
+              <div><span>YOUR INPUTS</span><h3>{loading ? 'Submitted details' : 'Want to make another adjustment?'}</h3></div>
+              <p>{loading ? 'Your information stays available while the agents work.' : 'Edit anything below, then run the workflow again.'}</p>
+            </div>
+          )}
 
           {mode === 'review' ? (
             <section className="workspace-card upload-section">
@@ -793,18 +931,7 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
             {mode === 'review' && <button className="btn btn-secondary" type="button" disabled={loading} onClick={() => { setErrorFor('review', ''); revealWorkflow('review', MOCK_WORKFLOW); }}>Preview sample result</button>}
             {mode === 'create' && <button className="btn btn-secondary" type="button" disabled={loading} onClick={() => { setErrorFor('create', ''); revealWorkflow('create', MOCK_CREATOR_WORKFLOW); }}>Preview creator result</button>}
           </div>
-
-          {loading && <ProcessingPanel mode={mode} />}
-          {error && <div className="error-banner" role="alert"><strong>Workflow error</strong><span>{error}</span></div>}
-          {workflow && (
-            <div
-              className="result-anchor"
-              ref={resultsRef}
-              key={`${workflow.workflow_id}-${resultRevealSequence}`}
-            >
-              <WorkflowResults workflow={workflow} />
-            </div>
-          )}
+          </div>
           </div>
         </div>
       </main>
@@ -812,15 +939,71 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
   );
 }
 
-function ProcessingPanel({ mode }: { mode: WorkspaceMode }) {
-  const stages = mode === 'review'
-    ? ['Secure document preparation', 'Content, visual, and layout review', 'Priority synthesis']
-    : ['Grounding source facts', 'Drafting structured resume', 'Compiling LaTeX and PDF'];
+const workflowEventDetails = (event: WorkflowProgressEvent) => Object.entries(event.details)
+  .filter(([, value]) => value !== null && value !== '')
+  .map(([key, value]) => `${key.replaceAll('_', ' ')}: ${typeof value === 'number' && key.includes('ratio') ? `${Math.round(value * 100)}%` : value}`);
+
+function ProcessingPanel({ mode, events }: { mode: WorkspaceMode; events: WorkflowProgressEvent[] }) {
+  const latest = events[events.length - 1];
+  const logRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logRef.current?.scrollTo({
+      top: logRef.current.scrollHeight,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth',
+    });
+  }, [events.length]);
   return (
-    <section className="processing-card" aria-live="polite">
-      <div className="spinner" />
-      <div><h3>{mode === 'review' ? 'Analyzing your resume' : 'Creating your resume'}</h3><p>{stages.join(' · ')}</p></div>
+    <section className="agent-thinking-card" aria-live="polite" aria-busy="true">
+      <div className="agent-thinking-hero">
+        <div className="agent-orbit" aria-hidden="true"><span /><i>AI</i></div>
+        <div className="agent-thinking-copy">
+          <div className="agent-thinking-eyebrow"><span className="live-dot" /> LIVE SERVER EVENTS <small>{events.length} received</small></div>
+          <h2>{mode === 'review' ? 'Your review is taking shape' : 'Building and testing your resume'}</h2>
+          <p>{latest?.message || 'Connecting securely to the workflow event stream...'}</p>
+        </div>
+        <div className="agent-stream-state"><span /> Streaming</div>
+      </div>
+      <div className="agent-event-rail" aria-hidden="true"><span /></div>
+      <div className="agent-log agent-log-stream" aria-label="Live agent activity log" ref={logRef}>
+        <div className="agent-log-header"><span>ACTIVITY LOG</span><small>Reported by the backend</small></div>
+        {events.length === 0 ? (
+          <div className="agent-log-empty"><span className="spinner" /> Waiting for the first server event...</div>
+        ) : events.map((event, index) => (
+            <div className={`agent-log-line ${index === events.length - 1 ? 'current' : ''}`} key={event.sequence}>
+              <span>{String(event.sequence).padStart(2, '0')}</span>
+              <div className="agent-log-message">
+                <div><code>{event.phase.replaceAll('_', ' ')}</code><b className={`event-status event-status-${event.status}`}>{event.status.replaceAll('_', ' ')}</b><time>{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time></div>
+                <p>{event.message}</p>
+                {workflowEventDetails(event).length > 0 && <small>{workflowEventDetails(event).map(item => <span key={item}>{item}</span>)}</small>}
+              </div>
+            </div>
+          ))}
+        <div className="agent-log-cursor"><span /> Listening for the next backend event</div>
+      </div>
+      <p className="agent-thinking-note">These are sanitized operational events from the running workflow. Prompts, private reasoning, and secrets are never streamed.</p>
     </section>
+  );
+}
+
+function CompletedActivityLog({ events }: { events: WorkflowProgressEvent[] }) {
+  return (
+    <details className="completed-activity-log">
+      <summary>
+        <div><span>RUN LOG</span><strong>See exactly what the workflow reported</strong></div>
+        <small>{events.length} server event{events.length === 1 ? '' : 's'} <i>+</i></small>
+      </summary>
+      <div className="completed-activity-events">
+        {events.map(event => (
+          <div className="completed-activity-event" key={event.sequence}>
+            <span>{String(event.sequence).padStart(2, '0')}</span>
+            <div><p><code>{event.phase.replaceAll('_', ' ')}</code><b className={`event-status event-status-${event.status}`}>{event.status.replaceAll('_', ' ')}</b><time>{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time></p><strong>{event.message}</strong>{workflowEventDetails(event).length > 0 && <small>{workflowEventDetails(event).join(' · ')}</small>}</div>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -837,7 +1020,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`status-badge status-${status}`}>{status.replaceAll('_', ' ')}</span>;
 }
 
-function WorkflowResults({ workflow }: { workflow: WorkflowResponse }) {
+function WorkflowResults({ workflow, onEditCreation }: { workflow: WorkflowResponse; onEditCreation: (document: GeneratedResumeDocument) => void }) {
   const review = workflow.review;
   const creation = workflow.creation;
   return (
@@ -872,7 +1055,7 @@ function WorkflowResults({ workflow }: { workflow: WorkflowResponse }) {
       ) : null}
 
       {review && <ReviewResults review={review} />}
-      {creation && <CreationResults workflow={workflow} />}
+      {creation && <CreationResults workflow={workflow} onEditCreation={onEditCreation} />}
 
       {(workflow.warnings.length > 0 || workflow.errors.length > 0) && (
         <article className="result-card warning-card">
@@ -936,7 +1119,7 @@ function Unavailable({ message }: { message: string | null }) {
   return <div className="unavailable"><strong>This branch is unavailable.</strong><p>{message || 'No result was returned. Other successful branches remain valid.'}</p></div>;
 }
 
-function CreationResults({ workflow }: { workflow: WorkflowResponse }) {
+function CreationResults({ workflow, onEditCreation }: { workflow: WorkflowResponse; onEditCreation: (document: GeneratedResumeDocument) => void }) {
   const creation = workflow.creation;
   if (!creation) return null;
   const pdfDownloadUrl = creation.artifact?.pdf_download_url
@@ -949,12 +1132,29 @@ function CreationResults({ workflow }: { workflow: WorkflowResponse }) {
           `/api/artifact-previews/${creation.artifact.artifact_id}.png`,
         )
       : null;
+  const mockBulletCount = creation.document
+    ? [...creation.document.experiences, ...creation.document.projects]
+        .flatMap(entry => entry.bullets)
+        .filter(bullet => bullet.is_mock).length
+    : 0;
+  const verifiedClaimCount = creation.claims_ledger.filter(claim => !claim.is_mock).length;
   return (
     <article className="result-card creation-result">
       <div className="creation-result-layout">
         <div className="creation-result-details">
-          <div className="result-card-header"><div><span className="result-label">RESUME CREATOR AGENT</span><h3>Grounded LaTeX draft</h3></div><StatusBadge status={creation.status} /></div>
+          <div className="result-card-header"><div><span className="result-label">RESUME CREATOR AGENT</span><h3>Complete AI-assisted LaTeX draft</h3></div><StatusBadge status={creation.status} /></div>
           <p>{workflow.final_message}</p>
+          <div className="creator-run-receipt" aria-label="Completed agent activity">
+            <div className="creator-run-receipt-header"><span>AGENT RUN</span><strong><i /> Workflow complete</strong></div>
+            <div className="creator-run-events">
+              <span><i>01</i><small>Source facts</small><strong>Grounded</strong></span>
+              <span><i>02</i><small>Resume draft</small><strong>Generated</strong></span>
+              <span><i>03</i><small>PDF checks</small><strong>{creation.refinement_passes ?? 0} refinement pass{creation.refinement_passes === 1 ? '' : 'es'}</strong></span>
+              <span><i>04</i><small>Page target</small><strong>{creation.final_page_count === 1 ? 'One page confirmed' : 'Needs review'}</strong></span>
+            </div>
+          </div>
+          {mockBulletCount > 0 && <div className="creator-mock-notice"><strong>{mockBulletCount} editable mock bullet{mockBulletCount === 1 ? '' : 's'} added</strong><p>The creator filled sparse areas with plausible achievements and metrics. Open the draft in the builder and replace anything that does not match your real experience.</p></div>}
+          {creation.document && <button className="btn btn-secondary creator-edit-button" type="button" onClick={() => onEditCreation(creation.document!)}>Edit this draft in Build Your Own</button>}
           {creation.artifact && (
             <div className="artifact-area">
               <div><span>COMPILATION</span><strong>{creation.artifact.compilation_status.replaceAll('_', ' ')}</strong></div>
@@ -965,9 +1165,12 @@ function CreationResults({ workflow }: { workflow: WorkflowResponse }) {
             </div>
           )}
           <div className="creation-stats">
-            <div><strong>{creation.claims_ledger.length}</strong><span>Grounded claims</span></div>
-            <div><strong>{creation.document?.missing_information.length ?? 0}</strong><span>Missing details</span></div>
+            <div><strong>{verifiedClaimCount}</strong><span>Verified claims</span></div>
+            <div><strong>{mockBulletCount}</strong><span>Mock bullets to edit</span></div>
             <div><strong>{creation.quality_status === 'passed' ? 'Passed' : 'Review'}</strong><span>Resume standards</span></div>
+            <div><strong>{creation.final_page_count ?? 'N/A'}</strong><span>Compiled pages</span></div>
+            <div><strong>{creation.page_fill_ratio == null ? 'N/A' : `${Math.round(creation.page_fill_ratio * 100)}%`}</strong><span>Page used</span></div>
+            <div><strong>{creation.refinement_passes}</strong><span>AI refinement passes</span></div>
           </div>
           {creation.quality_notes.length > 0 && <div className="missing-info"><h4>Standards needing more evidence</h4><ul>{creation.quality_notes.map((item) => <li key={item}>{item}</li>)}</ul></div>}
           {(creation.document?.missing_information.length ?? 0) > 0 && <div className="missing-info"><h4>Information to add next</h4><ul>{creation.document?.missing_information.map((item) => <li key={item}>{item}</li>)}</ul></div>}
@@ -1058,7 +1261,7 @@ function GeneratedResumePreview({
         </div>
       ) : null}
       <p className="preview-caption">Rendered from the compiled PDF. Select the preview to expand it.</p>
-      {modalOpen && previewLoaded && (
+      {modalOpen && previewLoaded && createPortal(
         <div
           className="resume-modal-backdrop"
           role="presentation"
@@ -1077,7 +1280,7 @@ function GeneratedResumePreview({
                 <span className="result-label">GENERATED DOCUMENT</span>
                 <h2 id="resume-preview-title">Resume preview</h2>
               </div>
-              <button type="button" onClick={() => setModalOpen(false)} aria-label="Close resume preview">×</button>
+              <button type="button" autoFocus onClick={() => setModalOpen(false)} aria-label="Close resume preview">Close</button>
             </header>
             <div className="resume-modal-canvas">
               <img src={renderedImageUrl} alt="Generated resume" />
@@ -1087,7 +1290,8 @@ function GeneratedResumePreview({
               <button className="btn btn-secondary" type="button" onClick={() => setModalOpen(false)}>Close preview</button>
             </footer>
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </aside>
   );

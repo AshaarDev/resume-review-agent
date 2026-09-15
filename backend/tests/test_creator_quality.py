@@ -41,6 +41,20 @@ def test_complete_xyz_resume_passes_structured_quality_gate():
                         "bold_phrases": ["10 hours"],
                         "source_fact_ids": ["f2"],
                     },
+                    {
+                        "text": "Improved job reliability by 25% through automated validation.",
+                        "bold_phrases": ["25%"],
+                        "source_fact_ids": ["f1"],
+                        "is_mock": True,
+                        "mock_reason": "Sample reliability outcome.",
+                    },
+                    {
+                        "text": "Supported 5 stakeholders by building self-service dashboards.",
+                        "bold_phrases": ["5 stakeholders"],
+                        "source_fact_ids": ["f2"],
+                        "is_mock": True,
+                        "mock_reason": "Sample stakeholder scope.",
+                    },
                 ],
             }
         ],
@@ -77,3 +91,30 @@ def test_sparse_resume_returns_actionable_policy_feedback():
     assert any("professional summary" in issue for issue in report.issues)
     assert any("XYZ-style" in issue for issue in report.issues)
     assert any("bold_phrases" in issue for issue in report.issues)
+
+
+def test_quality_gate_rejects_dropped_user_source_fact():
+    document = GeneratedResumeDocument(
+        professional_summary="Engineer who improves processing systems.",
+        professional_summary_source_fact_ids=["f1"],
+        experiences=[
+            {
+                "organization": "Example Co",
+                "role": "Engineer",
+                "source_fact_ids": ["f1"],
+                "bullets": [
+                    {
+                        "text": "Reduced processing time by 40% using caching.",
+                        "bold_phrases": ["40%"],
+                        "source_fact_ids": ["f1"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    report = assess_creator_output(
+        _brief(), document, get_resume_quality_policy()
+    )
+
+    assert any("f2" in issue and "source fact" in issue for issue in report.issues)

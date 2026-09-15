@@ -5,9 +5,11 @@ import './ResumeBuilder.css';
 type BuiltInSection = 'contact' | 'experiences' | 'education' | 'projects' | 'skill_groups';
 type Section = BuiltInSection | `custom:${string}`;
 type Collection = Exclude<Section, 'contact'>;
-interface Entry { id: string; name: string; title: string; location: string; dates: string; stack: string; coursework: string; points: string[]; skills: string[] }
+export interface ResumeBuilderEntry { id: string; name: string; title: string; location: string; dates: string; stack: string; coursework: string; points: string[]; skills: string[] }
+type Entry = ResumeBuilderEntry;
 interface CustomSection { id: string; name: string; entries: Entry[] }
-interface Draft { full_name: string; email: string; phone: string; location: string; experiences: Entry[]; education: Entry[]; projects: Entry[]; skill_groups: Entry[]; custom_sections: CustomSection[]; section_order: string[] }
+export interface ResumeBuilderDraft { full_name: string; email: string; phone: string; location: string; experiences: Entry[]; education: Entry[]; projects: Entry[]; skill_groups: Entry[]; custom_sections: CustomSection[]; section_order: string[] }
+type Draft = ResumeBuilderDraft;
 const STORAGE = 'resumeai.manual-builder.v1';
 const sections: { key: Section; name: string; hint: string }[] = [
   { key: 'contact', name: 'Personal details', hint: 'Start with your resume header.' },
@@ -275,10 +277,10 @@ function ResumePaper({ draft }: { draft: Draft }) {
   </div>;
 }
 
-export default function ResumeBuilder({ onSendToReview }: { onSendToReview: (file: File) => Promise<void> }) {
-  const [draft, setDraft] = useState<Draft>(loadDraft);
+export default function ResumeBuilder({ onSendToReview, initialDraft }: { onSendToReview: (file: File) => Promise<void>; initialDraft?: ResumeBuilderDraft | null }) {
+  const [draft, setDraft] = useState<Draft>(() => initialDraft ?? loadDraft());
   const [section, setSection] = useState<Section>('contact');
-  const [saveStatus, setSaveStatus] = useState('Saved on this device');
+  const [saveStatus, setSaveStatus] = useState(initialDraft ? 'AI draft imported — edit every mock point' : 'Saved on this device');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);

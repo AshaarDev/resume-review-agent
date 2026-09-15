@@ -55,7 +55,8 @@ def finalize_workflow(state: ResumeWorkflowState) -> dict:
                 "Your resume draft was created with the Harshibar LaTeX "
                 f"template. Compilation status: "
                 f"{creation.artifact.compilation_status.value.replace('_', ' ')}. "
-                "Review every claim before using or submitting it."
+                "The creator may add mock bullets to complete the page; edit and "
+                "verify every claim before using or submitting it."
             )
         else:
             message = (

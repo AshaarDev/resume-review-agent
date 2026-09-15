@@ -11,6 +11,7 @@ from core.workflow_schemas import (
     WorkflowStatus,
 )
 from workflows.state import ResumeWorkflowState
+from services.workflow_events import emit_workflow_event
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +31,30 @@ def validate_intent(state: ResumeWorkflowState) -> dict:
 
 
 def run_review_agent(state: ResumeWorkflowState) -> dict:
+    emit_workflow_event(
+        state.get("event_sink"),
+        phase="review_agent",
+        status="started",
+        message="Resume Review Agent started the content, visual, and layout checks.",
+    )
     try:
-        result = ResumeReviewAgent().run(
+        arguments = dict(
             source_path=Path(state["source_path"]),
             file_type=state["file_type"],
             job_description=state.get("job_description", ""),
             user_instructions=state.get("user_instructions", ""),
             workspace_path=Path(state["workspace_path"]),
             policy=ResumeQualityPolicy.model_validate(state["policy"]),
+        )
+        if state.get("event_sink") is not None:
+            arguments["event_sink"] = state["event_sink"]
+        result = ResumeReviewAgent().run(**arguments)
+        emit_workflow_event(
+            state.get("event_sink"),
+            phase="review_agent",
+            status=result.status.value,
+            message="Resume Review Agent finished combining the review branches.",
+            details={"proposed_actions": len(result.proposed_actions)},
         )
         return {
             "review_result": result.model_dump(mode="json"),
@@ -54,6 +71,12 @@ def run_review_agent(state: ResumeWorkflowState) -> dict:
         }
     except Exception:
         logger.exception("Review Agent node failed")
+        emit_workflow_event(
+            state.get("event_sink"),
+            phase="review_agent",
+            status="failed",
+            message="Resume Review Agent could not complete.",
+        )
         error = WorkflowMessage(
             code="REVIEW_AGENT_FAILED",
             message="The Resume Review Agent could not complete.",

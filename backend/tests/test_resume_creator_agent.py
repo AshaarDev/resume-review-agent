@@ -10,6 +10,7 @@ from core.creator_schemas import (
     ResumeCreationBrief,
 )
 from services.latex_compiler import LatexCompilationResult
+from services.creator_quality import CreatorQualityReport
 from services.resume_policy import get_resume_quality_policy
 
 
@@ -93,3 +94,89 @@ def test_creator_rejects_unknown_source_fact(monkeypatch, tmp_path: Path):
     assert result.status == "failed"
     assert result.errors[0].code == "CREATOR_UNSUPPORTED_CLAIM"
     assert not (tmp_path / "resume.tex").exists()
+
+
+def test_mock_bullet_is_identified_in_claim_ledger():
+    document = _document()
+    document.experiences[0].bullets[0].is_mock = True
+    document.experiences[0].bullets[0].mock_reason = "Editable sample metric."
+
+    claims = resume_creator_agent._build_and_validate_claims(_brief(), document)
+
+    assert claims[0].is_mock is False
+    assert claims[1].is_mock is True
+
+
+def test_creator_recompiles_until_exact_one_page(monkeypatch, tmp_path: Path):
+    initial = _document()
+    revised = _document()
+    revised.experiences[0].bullets.append(
+        revised.experiences[0].bullets[0].model_copy(
+            update={"text": "Improved reliability by 25% using monitoring."}
+        )
+    )
+    generated = []
+    refined = []
+    events = []
+    quality_reports = iter(
+        [
+            CreatorQualityReport(
+                issues=["Condense to one page."],
+                page_count=2,
+                page_fill_ratio=0.95,
+            ),
+            CreatorQualityReport(
+                issues=[], page_count=1, page_fill_ratio=0.82
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        resume_creator_agent,
+        "generate_resume_document",
+        lambda *args: generated.append(True) or initial,
+    )
+    monkeypatch.setattr(
+        resume_creator_agent,
+        "refine_resume_document",
+        lambda *args: refined.append(args[3]) or revised,
+    )
+    monkeypatch.setattr(
+        resume_creator_agent,
+        "compile_latex",
+        lambda path: LatexCompilationResult(
+            CompilationStatus.COMPILED,
+            pdf_path=path.with_suffix(".pdf"),
+        ),
+    )
+    monkeypatch.setattr(
+        resume_creator_agent,
+        "assess_creator_output",
+        lambda *args: next(quality_reports),
+    )
+    monkeypatch.setattr(
+        resume_creator_agent,
+        "save_resume_artifacts",
+        lambda tex_path, pdf_path: "b" * 32,
+    )
+    monkeypatch.setattr(
+        resume_creator_agent.settings, "CREATOR_MAX_REFINEMENT_PASSES", 3
+    )
+
+    result = ResumeCreatorAgent().run(
+        _brief(), "", "", tmp_path, get_resume_quality_policy(), events.append
+    )
+
+    assert generated == [True]
+    assert len(refined) == 1
+    assert "HARD PAGE CONSTRAINT" in refined[0][0]
+    assert result.status == "completed"
+    assert result.refinement_passes == 1
+    assert result.final_page_count == 1
+    assert result.page_fill_ratio == 0.82
+    assert any(event["phase"] == "refinement" for event in events)
+    assert any(
+        event["phase"] == "compiled_pdf_review"
+        and event["details"]["page_count"] == 2
+        for event in events
+    )

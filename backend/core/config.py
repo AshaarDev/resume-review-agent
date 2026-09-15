@@ -64,7 +64,10 @@ class Settings:
         os.getenv("CREATOR_ARTIFACT_TTL_HOURS", "24")
     )
     CREATOR_MAX_REFINEMENT_PASSES: int = int(
-        os.getenv("CREATOR_MAX_REFINEMENT_PASSES", "1")
+        os.getenv("CREATOR_MAX_REFINEMENT_PASSES", "3")
+    )
+    CREATOR_TARGET_PAGE_COUNT: int = int(
+        os.getenv("CREATOR_TARGET_PAGE_COUNT", "1")
     )
     CREATOR_MIN_PAGE_FILL_RATIO: float = float(
         os.getenv("CREATOR_MIN_PAGE_FILL_RATIO", "0.68")

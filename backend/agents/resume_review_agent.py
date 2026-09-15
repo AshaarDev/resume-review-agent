@@ -4,6 +4,7 @@ import logging
 import re
 from pathlib import Path
 from statistics import median
+from typing import Optional
 
 from core.policy_schemas import (
     PolicyFinding,
@@ -20,6 +21,7 @@ from core.workflow_schemas import (
 from services.review_pipeline import run_review_pipeline
 from services.policy_evaluator import evaluate_resume_policy
 from services.resume_policy import get_resume_quality_policy
+from services.workflow_events import WorkflowEventSink, emit_workflow_event
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +49,17 @@ class ResumeReviewAgent:
         user_instructions: str,
         workspace_path: Path,
         policy: ResumeQualityPolicy | None = None,
+        event_sink: Optional[WorkflowEventSink] = None,
     ) -> ReviewAgentResult:
         del user_instructions  # Reserved for agent-specific behavior in a later phase.
         active_policy = policy or get_resume_quality_policy()
         try:
+            emit_workflow_event(
+                event_sink,
+                phase="review_pipeline",
+                status="started",
+                message="Running content, visual, and deterministic layout analysis.",
+            )
             review = run_review_pipeline(
                 source_path,
                 file_type,
@@ -58,8 +67,25 @@ class ResumeReviewAgent:
                 workspace_path,
                 active_policy,
             )
+            emit_workflow_event(
+                event_sink,
+                phase="review_pipeline",
+                status="completed",
+                message="All available review branches returned their findings.",
+                details={
+                    "content_status": review.content_review.status.value,
+                    "visual_status": review.visual_review.status.value,
+                    "layout_status": review.layout_analysis.status.value,
+                },
+            )
         except Exception:
             logger.exception("Review pipeline failed completely")
+            emit_workflow_event(
+                event_sink,
+                phase="review_pipeline",
+                status="failed",
+                message="The review branches could not be completed.",
+            )
             return ReviewAgentResult(
                 status=AgentStatus.FAILED,
                 content_review={

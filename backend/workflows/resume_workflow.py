@@ -22,6 +22,10 @@ from services.document_processor import (
     validate_resume_bytes,
 )
 from services.resume_policy import get_resume_quality_policy
+from services.workflow_events import (
+    WorkflowEventSink,
+    emit_workflow_event,
+)
 from workflows.nodes.finalization_nodes import (
     finalize_workflow,
     synthesize_final_response,
@@ -74,10 +78,18 @@ def run_resume_workflow(
     job_description: str = "",
     user_instructions: str = "",
     creation_brief: Optional[ResumeCreationBrief] = None,
+    event_sink: Optional[WorkflowEventSink] = None,
 ) -> ResumeWorkflowResponse:
     """Run an intent through the shared graph and own all temporary artifacts."""
 
     workflow_id = str(uuid.uuid4())
+    emit_workflow_event(
+        event_sink,
+        phase="workflow",
+        status="started",
+        message=f"Started the {intent.value} workflow.",
+        details={"workflow_id": workflow_id, "intent": intent.value},
+    )
     if intent == WorkflowIntent.CREATE:
         if creation_brief is None:
             raise ValueError("Create workflows require a creation brief")
@@ -91,13 +103,28 @@ def run_resume_workflow(
                 job_description,
                 user_instructions,
                 creation_brief,
+                event_sink,
             )
             try:
-                return _build_workflow_response(
+                response = _build_workflow_response(
                     _compiled_workflow.invoke(state)
                 )
+                emit_workflow_event(
+                    event_sink,
+                    phase="workflow",
+                    status=response.status.value,
+                    message="The resume creation workflow finished.",
+                    details={"workflow_id": workflow_id},
+                )
+                return response
             except Exception:
                 logger.exception("Resume creation workflow failed")
+                emit_workflow_event(
+                    event_sink,
+                    phase="workflow",
+                    status="failed",
+                    message="The resume creation workflow stopped unexpectedly.",
+                )
                 return _failed_response(workflow_id, intent)
 
     if intent != WorkflowIntent.REVIEW:
@@ -110,6 +137,7 @@ def run_resume_workflow(
             job_description,
             user_instructions,
             None,
+            event_sink,
         )
         return _build_workflow_response(_compiled_workflow.invoke(state))
 
@@ -128,13 +156,28 @@ def run_resume_workflow(
             job_description,
             user_instructions,
             None,
+            event_sink,
         )
         try:
             final_state = _compiled_workflow.invoke(state)
         except Exception:
             logger.exception("Resume workflow execution failed")
+            emit_workflow_event(
+                event_sink,
+                phase="workflow",
+                status="failed",
+                message="The resume review workflow stopped unexpectedly.",
+            )
             return _failed_response(workflow_id, intent)
-        return _build_workflow_response(final_state)
+        response = _build_workflow_response(final_state)
+        emit_workflow_event(
+            event_sink,
+            phase="workflow",
+            status=response.status.value,
+            message="The resume review workflow finished.",
+            details={"workflow_id": workflow_id},
+        )
+        return response
 
 
 def run_resume_review_workflow(
@@ -163,6 +206,7 @@ def _initial_state(
     job_description: str,
     user_instructions: str,
     creation_brief: ResumeCreationBrief | None,
+    event_sink: WorkflowEventSink | None,
 ) -> ResumeWorkflowState:
     policy = get_resume_quality_policy()
     return {
@@ -190,6 +234,7 @@ def _initial_state(
         "warnings": [],
         "errors": [],
         "final_response": None,
+        "event_sink": event_sink,
     }
 
 

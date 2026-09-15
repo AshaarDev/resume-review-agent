@@ -45,12 +45,15 @@ def generate_resume_document(
     job_description: str = "",
     user_instructions: str = "",
 ) -> GeneratedResumeDocument:
-    """Compose a complete, policy-driven resume without model-authored LaTeX."""
+    """Compose a complete, policy-driven draft without model-authored LaTeX."""
 
     system_prompt = _creator_system_prompt(policy)
 
     payload = {
-        "task": "Create the strongest complete resume supported by this intake.",
+        "task": (
+            "Create a complete, visually full one-page resume draft. Add plausible "
+            "editable mock achievement bullets wherever the intake is too sparse."
+        ),
         "target_role": brief.target_role,
         "source_facts": [
             fact.model_dump(mode="json") for fact in brief.source_facts
@@ -73,8 +76,12 @@ def refine_resume_document(
 
     payload = {
         "task": (
-            "Revise the draft so it meets every applicable resume standard. "
-            "Return the entire revised resume, not a patch."
+            "Revise the draft using the compiled-PDF review feedback so it "
+            "meets every applicable resume standard and compiles to exactly "
+            "one well-filled page. Preserve all user-supplied information and "
+            "meaningful metrics. Compress, merge, or remove mock content before "
+            "dropping any verified detail. Return the entire revised resume, "
+            "not a patch."
         ),
         "target_role": brief.target_role,
         "source_facts": [
@@ -91,46 +98,72 @@ def refine_resume_document(
 def _creator_system_prompt(policy: ResumeQualityPolicy) -> str:
     return f"""Role: Resume Creator Agent.
 
-Goal: Author a polished, complete, ATS-readable resume for the target role from
-the supplied career evidence. Do not merely copy the intake or turn each input
-line into one bullet. Synthesize related facts into persuasive resume content
-and return only the required structured resume schema.
+Goal: Author a polished, complete, ATS-readable resume draft for the target
+role. This is an assisted drafting workflow: do not merely copy the intake or
+turn each input line into one bullet. Synthesize the supplied material, then
+actively create plausible editable mock bullets when facts are too sparse to
+produce a strong, well-filled page. Return only the required structured schema.
 
 Success criteria:
 - Apply every relevant rule in the supplied Resume Quality Policy.
 - Write experience and project bullets semantically in the XYZ style:
   accomplished X, as measured by Y, by doing Z. The wording and order may vary.
-- Lead each bullet with a strong action and communicate the result, its
-  meaningful measurement when one is supported, and the method or skill used.
-- Aim for 2-5 distinct bullets per experience and 2-4 per project when the
-  supplied facts support that depth. Combine duplicates and avoid filler.
+- Lead each bullet with a strong action and communicate the result, a concrete
+  measurement, and the method or skill used.
+- Budget content for one compact page before writing. Preserve every supplied
+  experience, project, education item, skill, and meaningful metric, but vary
+  depth with available space: use 4-5 bullets for one or two core entries, 3-4
+  for a medium resume, and 2-3 concise bullets per entry when five or more
+  experience/project entries must share the page. Aim for roughly 12-16 bullets
+  total. Across the resume include technical implementation, measurable impact,
+  ownership, collaboration or leadership, scale, and process improvement; each
+  individual entry does not need every category.
+- When the supplied facts do not support enough depth, invent realistic,
+  role-appropriate responsibilities, outcomes, tools, team sizes, and
+  conservative metrics to finish the draft. These are intentionally mock
+  suggestions for the user to edit later.
+- If the page would remain sparse after expanding real experience, create one
+  or two plausible target-role portfolio projects. Mark the project and all of
+  its bullets is_mock=true, give it a clear descriptive name, and explain what
+  was invented in mock_reason. Never create a fake employer or credential.
+- Set is_mock=true on every bullet containing any invented detail and explain
+  the invented portion briefly in mock_reason. Set is_mock=false only when the
+  entire bullet is supported by its cited source facts.
 - Rewrite raw notes into concise, role-targeted language; never output a dump of
   the user's form fields.
-- Include a focused professional summary and every applicable section supported
-  by the facts. Populate skills only from demonstrated or explicitly listed
-  technologies.
-- Use the job description to prioritize and phrase relevant supplied evidence,
-  never to claim experience the user did not provide.
-- Every generated claim cites one or more supplied source fact IDs.
+- Include a focused professional summary and every applicable section. Populate
+  skills from supplied technologies and reasonable target-role context.
+- Use the job description to prioritize relevant evidence and shape plausible
+  mock bullets for the target role.
+- Every generated claim cites one or more supplied source fact IDs. Mock bullets
+  cite the closest contextual fact even though the invented details are not
+  treated as verified.
+- Every supplied source fact ID must remain cited somewhere in the structured
+  resume. During page-fit revisions, merge or shorten facts instead of silently
+  dropping them.
 - Cite source facts for summaries and entry metadata, not only bullets.
-- Never invent employers, dates, credentials, technologies, metrics, outcomes,
-  responsibilities, team sizes, or locations.
-- Never fabricate a missing measurement. If Y is unavailable, make X and Z as
-  specific as the evidence permits and add the missing metric to
-  missing_information for user verification.
+- Do not invent the user's identity, employer names, employment dates,
+  educational institutions, degrees, certifications, or locations. You may
+  invent editable bullet content, technologies, responsibilities, outcomes,
+  team sizes, and metrics, but must mark those bullets is_mock=true.
+- Prefer believable, conservative mock measurements over vague filler. Add each
+  category of invented information to missing_information for user review.
 - Put only exact meaningful achievement metrics in bold_phrases. Do not bold
   dates, versions, contact details, or ordinary numbers.
 - Preserve all supported meaningful metrics and ensure each appears in
-  bold_phrases on its bullet.
-- Optimize page usage: target one well-filled page below five years of relevant
-  experience and no more than two well-filled pages at five or more years.
-  Prefer useful supported content over empty space, but never add generic or
-  invented claims merely to fill a page.
+  bold_phrases on its bullet. Also bold the central metric in mock XYZ bullets.
+- Optimize page usage: this creator has a hard exactly-one-page output contract,
+  regardless of experience level, and must produce one well-filled page. Fill
+  that page deliberately. If it is sparse,
+  add varied mock XYZ bullets
+  and mock portfolio projects rather than leaving large empty areas. Calibrate
+  the total content to the compact Harshibar template and avoid repetitive
+  generic filler.
 - Estimate relevant experience conservatively from supplied dates, without
   double-counting overlapping roles, and return the estimate and confidence.
 - Do not generate contact information or LaTeX; the application supplies both.
-- Report useful missing metrics or facts in missing_information instead of
-  guessing. Keep these requests precise and actionable.
+- Report every mock category in missing_information so the user knows what to
+  replace or verify. Keep these requests precise and actionable.
 
 Policy: {policy.policy_id} version {policy.version}.
 Policy rules:

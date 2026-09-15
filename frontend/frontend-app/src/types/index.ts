@@ -171,6 +171,8 @@ export interface GeneratedResumeBullet {
   text: string;
   bold_phrases: string[];
   source_fact_ids: string[];
+  is_mock: boolean;
+  mock_reason: string | null;
 }
 
 export interface GeneratedResumeDocument {
@@ -186,10 +188,13 @@ export interface GeneratedResumeDocument {
   }>;
   projects: Array<{
     name: string;
+    stack: string;
     date_range: string;
     url: string | null;
     source_fact_ids: string[];
     bullets: GeneratedResumeBullet[];
+    is_mock: boolean;
+    mock_reason: string | null;
   }>;
   education: Array<{
     institution: string;
@@ -219,6 +224,7 @@ export interface CreatorAgentResult {
     section: string;
     generated_text: string;
     source_fact_ids: string[];
+    is_mock: boolean;
   }>;
   artifact: {
     artifact_id: string;
@@ -233,6 +239,9 @@ export interface CreatorAgentResult {
   requires_user_review: boolean;
   quality_status: 'passed' | 'needs_review' | 'unavailable';
   quality_notes: string[];
+  refinement_passes: number;
+  final_page_count: number | null;
+  page_fill_ratio: number | null;
   warnings: WorkflowMessage[];
   errors: WorkflowMessage[];
 }
@@ -250,4 +259,13 @@ export interface WorkflowResponse {
   agent_statuses: Record<string, AgentStatus>;
   warnings: WorkflowMessage[];
   errors: WorkflowMessage[];
+}
+
+export interface WorkflowProgressEvent {
+  sequence: number;
+  timestamp: string;
+  phase: string;
+  status: string;
+  message: string;
+  details: Record<string, string | number | boolean | null>;
 }

@@ -67,7 +67,8 @@ def test_creator_uses_configured_luna_structured_output(monkeypatch):
     system_prompt = calls[0]["input"][0]["content"]
     assert "XYZ style" in system_prompt
     assert "one well-filled page" in system_prompt
-    assert "Never fabricate a missing measurement" in system_prompt
+    assert "invent realistic" in system_prompt
+    assert "is_mock=true" in system_prompt
 
 
 def test_creator_reports_missing_openai_configuration(monkeypatch):

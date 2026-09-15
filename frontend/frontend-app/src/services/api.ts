@@ -1,5 +1,6 @@
 import type {
   ResumeCreationBrief,
+  WorkflowProgressEvent,
   WorkflowRequest,
   WorkflowResponse,
 } from '../types';
@@ -12,6 +13,7 @@ export const analyzeResume = async (
   file: File,
   jobDescription = '',
   userInstructions = '',
+  onProgress?: (event: WorkflowProgressEvent) => void,
 ): Promise<WorkflowResponse> => {
   const request: WorkflowRequest = {
     intent: 'review',
@@ -21,28 +23,14 @@ export const analyzeResume = async (
     user_instructions: userInstructions,
   };
 
-  const response = await fetch(`${API_BASE_URL}/api/resume-workflows`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(
-      responseErrorMessage(
-        payload,
-        'Failed to run the resume review workflow',
-      ),
-    );
-  }
-  return response.json();
+  return runWorkflowStream(request, onProgress);
 };
 
 export const createResume = async (
   creationBrief: ResumeCreationBrief,
   jobDescription = '',
   userInstructions = '',
+  onProgress?: (event: WorkflowProgressEvent) => void,
 ): Promise<WorkflowResponse> => {
   const request: WorkflowRequest = {
     intent: 'create',
@@ -50,16 +38,17 @@ export const createResume = async (
     job_description: jobDescription,
     user_instructions: userInstructions,
   };
-  return runWorkflow(request);
+  return runWorkflowStream(request, onProgress);
 };
 
 export const artifactUrl = (path: string): string =>
   path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
 
-const runWorkflow = async (
+const runWorkflowStream = async (
   request: WorkflowRequest,
+  onProgress?: (event: WorkflowProgressEvent) => void,
 ): Promise<WorkflowResponse> => {
-  const response = await fetch(`${API_BASE_URL}/api/resume-workflows`, {
+  const response = await fetch(`${API_BASE_URL}/api/resume-workflows/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
@@ -70,7 +59,46 @@ const runWorkflow = async (
       responseErrorMessage(payload, 'Failed to run the resume workflow'),
     );
   }
-  return response.json();
+  if (!response.body) {
+    throw new Error('This browser could not open the workflow event stream.');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: WorkflowResponse | null = null;
+
+  const processBlock = (block: string) => {
+    if (!block.trim() || block.trimStart().startsWith(':')) return;
+    let eventName = 'message';
+    const dataLines: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+    }
+    if (!dataLines.length) return;
+    const payload = JSON.parse(dataLines.join('\n')) as unknown;
+    if (eventName === 'progress') {
+      onProgress?.(payload as WorkflowProgressEvent);
+    } else if (eventName === 'result') {
+      result = payload as WorkflowResponse;
+    } else if (eventName === 'error') {
+      const streamError = payload as { message?: string };
+      throw new Error(streamError.message || 'The workflow stream failed.');
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const blocks = buffer.split(/\r?\n\r?\n/);
+    buffer = blocks.pop() || '';
+    blocks.forEach(processBlock);
+    if (done) break;
+  }
+  if (buffer.trim()) processBlock(buffer);
+  if (!result) throw new Error('The workflow ended without returning a result.');
+  return result;
 };
 
 const fileToBase64 = (file: File): Promise<string> =>

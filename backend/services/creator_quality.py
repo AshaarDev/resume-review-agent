@@ -53,23 +53,56 @@ def assess_creator_output(
         for bullet in entry.bullets
     ] + [bullet for entry in document.projects for bullet in entry.bullets]
 
+    cited_fact_ids = set(document.professional_summary_source_fact_ids)
+    for entry in document.experiences:
+        cited_fact_ids.update(entry.source_fact_ids)
+        for bullet in entry.bullets:
+            cited_fact_ids.update(bullet.source_fact_ids)
+    for entry in document.projects:
+        cited_fact_ids.update(entry.source_fact_ids)
+        for bullet in entry.bullets:
+            cited_fact_ids.update(bullet.source_fact_ids)
+    for entry in document.education:
+        cited_fact_ids.update(entry.source_fact_ids)
+    for group in document.skill_groups:
+        cited_fact_ids.update(group.source_fact_ids)
+    uncited_fact_ids = [
+        fact.fact_id
+        for fact in brief.source_facts
+        if fact.fact_id not in cited_fact_ids
+    ]
+    if uncited_fact_ids:
+        issues.append(
+            "Preserve every user-supplied source fact in the resume. Incorporate "
+            "or merge the content associated with these uncited fact IDs: "
+            + ", ".join(uncited_fact_ids)
+            + "."
+        )
+
     if not document.professional_summary:
         issues.append(
             "Add a concise role-targeted professional summary grounded in the supplied facts."
         )
 
+    # Required depth adapts to the number of entries that must share one page.
+    # A fixed four-bullets-per-role rule fights the page-fit constraint for
+    # candidates with several roles and causes the refinement loop to oscillate.
+    entry_count = len(document.experiences) + len(document.projects)
+    experience_minimum = 4 if entry_count <= 2 else 3 if entry_count <= 4 else 2
+    project_minimum = 3 if entry_count <= 2 else 2
     shallow_entries = [
         f"{entry.role} at {entry.organization}"
         for entry in document.experiences
-        if len(entry.bullets) < 2
+        if len(entry.bullets) < experience_minimum
     ] + [
         f"project {entry.name}"
         for entry in document.projects
-        if len(entry.bullets) < 2
+        if len(entry.bullets) < project_minimum
     ]
     if shallow_entries:
         issues.append(
-            "Develop additional distinct, supported XYZ-style bullets for: "
+            "Develop additional distinct XYZ-style bullets, using clearly marked "
+            "mock suggestions when the intake is sparse, for: "
             + "; ".join(shallow_entries[:4])
             + "."
         )
@@ -126,7 +159,10 @@ def assess_creator_output(
         )
 
     page_count, fill_ratio = _inspect_pdf(pdf_path)
-    allowed_pages = _allowed_pages(document, policy)
+    # Creation has a stricter product contract than review: the generated
+    # artifact must target exactly one page, even when the review policy would
+    # permit an experienced candidate to use two.
+    allowed_pages = settings.CREATOR_TARGET_PAGE_COUNT
     if page_count is not None and page_count > allowed_pages:
         issues.append(
             f"Condense the resume to {allowed_pages} page{'s' if allowed_pages > 1 else ''} "
@@ -158,24 +194,6 @@ def _has_action_and_method(text: str) -> bool:
 
 def _meaningful_metrics(text: str) -> list[str]:
     return [match.group(0).strip() for match in _METRIC_PATTERN.finditer(text)]
-
-
-def _allowed_pages(
-    document: GeneratedResumeDocument, policy: ResumeQualityPolicy
-) -> int:
-    rule = policy.rule("EXCESSIVE_PAGE_COUNT_FOR_EXPERIENCE")
-    experienced = (
-        document.estimated_relevant_experience_years is not None
-        and document.experience_estimate_confidence
-        >= (rule.minimum_experience_confidence or 0.6)
-        and document.estimated_relevant_experience_years
-        >= (rule.experience_threshold_years or 5)
-    )
-    return (
-        rule.max_pages_at_or_above_threshold or 2
-        if experienced
-        else rule.max_pages_below_threshold or 1
-    )
 
 
 def _inspect_pdf(pdf_path: Path | None) -> tuple[int | None, float | None]:

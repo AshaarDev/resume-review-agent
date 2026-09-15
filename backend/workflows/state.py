@@ -2,6 +2,8 @@
 
 from typing import Literal, TypedDict
 
+from services.workflow_events import WorkflowEventSink
+
 
 class ResumeWorkflowState(TypedDict, total=False):
     workflow_id: str
@@ -25,3 +27,4 @@ class ResumeWorkflowState(TypedDict, total=False):
     errors: list[dict]
     final_message: str
     final_response: dict | None
+    event_sink: WorkflowEventSink | None
