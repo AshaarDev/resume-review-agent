@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Intelligence Agents</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Resume Intelligence Agents</h1>
+            <p>Review an existing resume or create a factual LaTeX draft</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="workflow-tabs">
+                    <button id="reviewModeBtn" class="active" type="button">Review resume</button>
+                    <button id="createModeBtn" type="button">Create resume</button>
+                </div>
+                <div id="reviewInput">
+                <div class="upload-box" id="uploadBox">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <h3>Drop your resume here</h3>
+                    <p>or click to browse</p>
+                    <p class="file-types">Supports PDF, DOCX, Images (JPG, PNG)</p>
+                    <input type="file" id="fileInput" accept=".pdf,.docx,.jpg,.jpeg,.png" hidden>
+                </div>
+
+                <div class="file-info" id="fileInfo" style="display: none;">
+                    <div class="file-details">
+                        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <div>
+                            <p class="file-name" id="fileName"></p>
+                            <p class="file-size" id="fileSize"></p>
+                        </div>
+                    </div>
+                    <button class="btn-remove" id="removeFile">Remove</button>
+                </div>
+                </div>
+
+                <div class="creator-form" id="creatorInput" style="display: none;">
+                    <div class="creator-heading">
+                        <div>
+                            <h2>Factual resume intake</h2>
+                            <p class="field-note">Use verified facts only, or load the sample to test the complete workflow.</p>
+                        </div>
+                        <button class="sample-fill-btn" id="sampleCreatorBtn" type="button">Autofill sample</button>
+                    </div>
+                    <div class="creator-grid">
+                        <label>Full name *<input id="creatorName" autocomplete="name"></label>
+                        <label>Target role<input id="creatorTargetRole"></label>
+                        <label>Email<input id="creatorEmail" type="email" autocomplete="email"></label>
+                        <label>Phone<input id="creatorPhone" autocomplete="tel"></label>
+                        <label>Location<input id="creatorLocation"></label>
+                    </div>
+                    <label>Profile links, one per line
+                        <textarea id="creatorLinks" rows="3" placeholder="https://linkedin.com/in/..."></textarea>
+                    </label>
+                    <label>Verified career, project, education, and skill facts *
+                        <textarea id="creatorFacts" rows="10" placeholder="One fact per line. Include employers, roles, dates, and known outcomes."></textarea>
+                    </label>
+                    <p class="field-note">Only enter facts you can verify. The agent cites these facts for every generated claim.</p>
+                </div>
+
+                <div class="job-description-section">
+                    <label for="jobDescription">Job Description (Optional)</label>
+                    <textarea 
+                        id="jobDescription" 
+                        placeholder="Paste the job description here to get tailored feedback..."
+                        rows="4"
+                    ></textarea>
+                    <label for="userInstructions">Additional Instructions (Optional)</label>
+                    <textarea
+                        id="userInstructions"
+                        placeholder="For example: prioritize executive clarity or technical impact."
+                        rows="3"
+                    ></textarea>
+                </div>
+
+                <button class="btn-primary" id="analyzeBtn" disabled>
+                    Review Resume
+                </button>
+                
+                <button class="btn-secondary" id="testMockBtn">
+                    Preview Workflow Result
+                </button>
+            </div>
+
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <h2>Analysis Results</h2>
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Running the review workflow...</p>
+                </div>
+                <div class="results-content" id="resultsContent"></div>
+            </div>
+        </main>
+
+        <footer>
+            <p>GPT content review | Gemini vision | Luna creation | LangGraph workflow</p>
+        </footer>
+    </div>
+
+    <!-- Markdown rendering library -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

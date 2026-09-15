@@ -1,0 +1,62 @@
+% Resume in LaTeX. Original author: Harshibar; based on jakeryang/resume.
+% MIT license. Application template ID: harshibar, compact serif variant.
+\documentclass[letterpaper,10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}
+\usepackage[letterpaper,margin=0.45in,top=0.45in,bottom=0.45in]{geometry}
+\usepackage{titlesec}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage[normalem]{ulem}
+
+\definecolor{light-grey}{gray}{0.55}
+\definecolor{dark-grey}{gray}{0.20}
+\definecolor{text-grey}{gray}{0.12}
+\newcommand{\myuline}[1]{\uline{#1}}
+\pagestyle{empty}
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\setlength{\tabcolsep}{0pt}
+\setlength{\emergencystretch}{1em}
+\setlist[itemize]{topsep=2pt,itemsep=0pt,parsep=0pt,partopsep=0pt}
+\renewcommand{\small}{\fontsize{9.2}{10.6}\selectfont}
+\titleformat{\section}{\fontsize{10.5}{12}\selectfont\bfseries\raggedright}{}{0em}{}[{\color{text-grey}\titlerule[0.8pt]}]
+\titlespacing*{\section}{0pt}{7pt}{3pt}
+
+\newcommand{\resumeItem}[1]{\item {\fontsize{9.2}{10.6}\selectfont #1\par}}
+\newcommand{\resumeSubheading}[4]{
+  \item
+  \begin{tabularx}{\linewidth}{@{}X>{\raggedleft\arraybackslash}p{0.25\linewidth}@{}}
+    {\fontsize{10}{11.4}\selectfont\textbf{#1}} & {\fontsize{9.6}{11.4}\selectfont\textbf{#2}}\\
+    {\fontsize{9.5}{11}\selectfont #3} & {\fontsize{9.2}{11}\selectfont #4}\\
+  \end{tabularx}
+}
+\newcommand{\resumeProjectHeading}[2]{
+  \item
+  \begin{tabularx}{\linewidth}{@{}X>{\raggedleft\arraybackslash}p{0.22\linewidth}@{}}
+    {\fontsize{10}{11.4}\selectfont #1} & {\fontsize{9.6}{11.4}\selectfont\textbf{#2}}\\
+  \end{tabularx}
+}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0in,label={},topsep=0pt,itemsep=5pt]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=12pt,label=\textbullet,topsep=0pt,itemsep=0.5pt]}
+\newcommand{\resumeItemListEnd}{\end{itemize}}
+
+\color{text-grey}
+\begin{document}
+\fontsize{9.6}{11.2}\selectfont
+% Slightly more breathing room between words without changing font sizes.
+\spaceskip=0.39em plus 0.10em minus 0.05em
+%%__HEADER__%%
+%%__SUMMARY__%%
+%%__SKILLS__%%
+%%__EXPERIENCE__%%
+%%__PROJECTS__%%
+%%__EDUCATION__%%
+\end{document}

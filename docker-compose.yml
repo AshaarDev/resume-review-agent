@@ -1,0 +1,15 @@
+services:
+  resume-agents:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - backend/.env
+    ports:
+      - "8001:8001"
+    volumes:
+      - resume-artifacts:/app/backend/artifacts
+    restart: unless-stopped
+
+volumes:
+  resume-artifacts:

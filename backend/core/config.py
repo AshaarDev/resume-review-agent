@@ -1,0 +1,84 @@
+"""Application configuration."""
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+class Settings:
+    """Application settings loaded from environment."""
+    
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4o-mini")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_VISION_MODEL: str = os.getenv(
+        "GEMINI_VISION_MODEL", "gemini-3.6-flash"
+    )
+    GEMINI_VISION_FALLBACK_MODEL: str = os.getenv(
+        "GEMINI_VISION_FALLBACK_MODEL", "gemini-3.1-flash-lite"
+    )
+    GEMINI_TIMEOUT_SECONDS: int = int(
+        os.getenv("GEMINI_TIMEOUT_SECONDS", "60")
+    )
+
+    MAX_RESUME_FILE_BYTES: int = int(
+        os.getenv("MAX_RESUME_FILE_BYTES", str(10 * 1024 * 1024))
+    )
+    MAX_RESUME_PAGES: int = int(os.getenv("MAX_RESUME_PAGES", "5"))
+    MAX_VISION_IMAGE_PIXELS: int = int(
+        os.getenv("MAX_VISION_IMAGE_PIXELS", "16000000")
+    )
+    MAX_VISION_IMAGE_DIMENSION: int = int(
+        os.getenv("MAX_VISION_IMAGE_DIMENSION", "4096")
+    )
+    DOCUMENT_RENDER_DPI: int = int(os.getenv("DOCUMENT_RENDER_DPI", "144"))
+    DOCX_CONVERSION_TIMEOUT_SECONDS: int = int(
+        os.getenv("DOCX_CONVERSION_TIMEOUT_SECONDS", "60")
+    )
+    MCP_ALLOWED_FILE_ROOTS: str = os.getenv(
+        "MCP_ALLOWED_FILE_ROOTS", "uploads"
+    )
+    
+    # Orchestrator configuration
+    ORCHESTRATOR_MODEL: str = os.getenv("ORCHESTRATOR_MODEL", "gpt-5.6-luna")
+    ORCHESTRATOR_REASONING_EFFORT: str = os.getenv(
+        "ORCHESTRATOR_REASONING_EFFORT", "low"
+    )
+    ORCHESTRATOR_TIMEOUT_SECONDS: int = int(
+        os.getenv("ORCHESTRATOR_TIMEOUT_SECONDS", "60")
+    )
+
+    # Resume Creator Agent configuration
+    CREATOR_MODEL: str = os.getenv("CREATOR_MODEL", "gpt-5.6-luna")
+    CREATOR_REASONING_EFFORT: str = os.getenv(
+        "CREATOR_REASONING_EFFORT", "none"
+    )
+    CREATOR_TIMEOUT_SECONDS: int = int(
+        os.getenv("CREATOR_TIMEOUT_SECONDS", "60")
+    )
+    LATEX_COMPILE_TIMEOUT_SECONDS: int = int(
+        os.getenv("LATEX_COMPILE_TIMEOUT_SECONDS", "30")
+    )
+    CREATOR_ARTIFACT_TTL_HOURS: int = int(
+        os.getenv("CREATOR_ARTIFACT_TTL_HOURS", "24")
+    )
+    CREATOR_MAX_REFINEMENT_PASSES: int = int(
+        os.getenv("CREATOR_MAX_REFINEMENT_PASSES", "3")
+    )
+    CREATOR_TARGET_PAGE_COUNT: int = int(
+        os.getenv("CREATOR_TARGET_PAGE_COUNT", "1")
+    )
+    CREATOR_MIN_PAGE_FILL_RATIO: float = float(
+        os.getenv("CREATOR_MIN_PAGE_FILL_RATIO", "0.68")
+    )
+    
+    SYSTEM_PROMPT: str = """You are a helpful resume review assistant.
+
+Your role is to help users create and improve their resumes.
+
+Keep your responses clear, professional, and actionable.
+"""
+
+
+settings = Settings()
