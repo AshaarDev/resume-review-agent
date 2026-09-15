@@ -30,6 +30,7 @@ function loadDraft(): Draft {
         if (!Array.isArray(custom) || custom.length > 8 || !custom.every(c => c && typeof c.id === 'string' && typeof c.name === 'string' && c.name.trim() && c.name.length <= 80 && Array.isArray(c.entries) && c.entries.length <= 12 && c.entries.every((e: Entry) => e && typeof e.id === 'string' && ['name', 'title', 'location', 'dates', 'stack', 'coursework'].every(f => typeof (e as unknown as Record<string, unknown>)[f] === 'string') && Array.isArray(e.points) && e.points.every(p => typeof p === 'string') && Array.isArray(e.skills) && e.skills.every(p => typeof p === 'string')))) return emptyDraft();
         const normalizeEntry = (entry: Entry): Entry => ({
           ...entry,
+          name: stripLegacyAiDraftLabel(entry.name),
           coursework: normalizeFormatting(entry.coursework),
           points: entry.points.map(normalizeFormatting),
         });
@@ -85,9 +86,12 @@ function formattedText(value: string): React.ReactNode[] {
   return render(normalizeFormatting(value));
 }
 function normalizeFormatting(value: string): string {
-  return value
+  return stripLegacyAiDraftLabel(value)
     .replace(/(?<!\*)\*{6}(?!\*)([\s\S]+?)(?<!\*)\*{6}(?!\*)/g, '***$1***')
     .replace(/(?<!\*)\*{4}(?!\*)([\s\S]+?)(?<!\*)\*{4}(?!\*)/g, '**$1**');
+}
+function stripLegacyAiDraftLabel(value: string): string {
+  return value.replace(/^\[AI DRAFT(?:\s*[—-]\s*EDIT)?\]\s*/i, '');
 }
 function editorHtml(value: string): string {
   return normalizeFormatting(value)
@@ -284,6 +288,7 @@ export default function ResumeBuilder({ onSendToReview, initialDraft }: { onSend
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [dialogZoom, setDialogZoom] = useState(100);
   const [previewSize, setPreviewSize] = useState<{ width: number; height: number } | null>(null);
   const previewPanel = useRef<HTMLElement>(null);
   const builderGrid = useRef<HTMLDivElement>(null);
@@ -457,6 +462,17 @@ export default function ResumeBuilder({ onSendToReview, initialDraft }: { onSend
       ><span aria-hidden="true">&#x25E2;</span></span>
       </aside>
     </div>
-    <dialog className="byo-dialog" ref={dialog} onCancel={() => setExpanded(false)} onClick={e => { if (e.target === e.currentTarget) setExpanded(false); }}><div className="byo-dialog-header"><div><span className="section-kicker">YOUR RESUME</span><h3>Document preview</h3></div><button type="button" autoFocus onClick={() => setExpanded(false)} aria-label="Close document preview">Close</button></div><div className="byo-dialog-paper">{paper}</div></dialog>
+    <dialog className="byo-dialog" ref={dialog} onCancel={() => setExpanded(false)} onClick={e => { if (e.target === e.currentTarget) setExpanded(false); }}>
+      <div className="byo-dialog-header"><div><span className="section-kicker">YOUR RESUME</span><h3>Document preview</h3></div><button className="byo-dialog-close" type="button" autoFocus onClick={() => setExpanded(false)} aria-label="Close document preview"><span aria-hidden="true">×</span><span>Close</span></button></div>
+      <div className="byo-dialog-viewer">
+        <div className="byo-dialog-paper"><div className="byo-dialog-page" style={{ width: `${dialogZoom}%` }}>{paper}</div></div>
+        <aside className="byo-zoom-rail" aria-label="Preview zoom controls">
+          <button type="button" onClick={() => setDialogZoom(value => Math.min(180, value + 10))} aria-label="Zoom in">+</button>
+          <div className="byo-zoom-track"><span>180</span><input aria-label="Resume preview zoom" type="range" min="60" max="180" step="10" value={dialogZoom} onChange={event => setDialogZoom(Number(event.target.value))} /><span>60</span></div>
+          <button type="button" onClick={() => setDialogZoom(value => Math.max(60, value - 10))} aria-label="Zoom out">−</button>
+          <button className="byo-zoom-value" type="button" onClick={() => setDialogZoom(100)} aria-label="Reset zoom to 100 percent">{dialogZoom}%</button>
+        </aside>
+      </div>
+    </dialog>
   </section>;
 }

@@ -26,7 +26,7 @@ function createdResumeToBuilderDraft(
     stack: '', coursework: '', points: [], skills: [], ...values,
   });
   const point = (bullet: GeneratedResumeDocument['experiences'][number]['bullets'][number]) =>
-    `${bullet.is_mock ? '[AI DRAFT — EDIT] ' : ''}${markGeneratedFormatting(bullet.text, bullet.bold_phrases)}`;
+    markGeneratedFormatting(bullet.text, bullet.bold_phrases);
   return {
     ...contact,
     experiences: document.experiences.map(item => entry({
@@ -34,7 +34,7 @@ function createdResumeToBuilderDraft(
       dates: item.date_range, points: item.bullets.map(point),
     })),
     projects: document.projects.map(item => entry({
-      name: `${item.is_mock ? '[AI DRAFT] ' : ''}${item.name}`,
+      name: item.name,
       stack: item.stack, dates: item.date_range,
       points: item.bullets.map(point),
     })),
@@ -1200,6 +1200,7 @@ function GeneratedResumePreview({
   const [previewError, setPreviewError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [zoom, setZoom] = useState(100);
 
   const renderedImageUrl = imageUrl.startsWith('data:')
     ? imageUrl
@@ -1280,10 +1281,22 @@ function GeneratedResumePreview({
                 <span className="result-label">GENERATED DOCUMENT</span>
                 <h2 id="resume-preview-title">Resume preview</h2>
               </div>
-              <button type="button" autoFocus onClick={() => setModalOpen(false)} aria-label="Close resume preview">Close</button>
+              <button className="modal-close-button" type="button" autoFocus onClick={() => setModalOpen(false)} aria-label="Close resume preview"><span aria-hidden="true">×</span><span>Close</span></button>
             </header>
-            <div className="resume-modal-canvas">
-              <img src={renderedImageUrl} alt="Generated resume" />
+            <div className="resume-modal-viewer">
+              <div className="resume-modal-canvas">
+                <img src={renderedImageUrl} alt="Generated resume" style={{ width: `${zoom}%` }} />
+              </div>
+              <aside className="document-zoom-rail" aria-label="Preview zoom controls">
+                <button type="button" onClick={() => setZoom(value => Math.min(180, value + 10))} aria-label="Zoom in">+</button>
+                <div className="document-zoom-track">
+                  <span>180</span>
+                  <input aria-label="Resume preview zoom" type="range" min="60" max="180" step="10" value={zoom} onChange={event => setZoom(Number(event.target.value))} />
+                  <span>60</span>
+                </div>
+                <button type="button" onClick={() => setZoom(value => Math.max(60, value - 10))} aria-label="Zoom out">−</button>
+                <button className="document-zoom-value" type="button" onClick={() => setZoom(100)} aria-label="Reset zoom to 100 percent">{zoom}%</button>
+              </aside>
             </div>
             <footer className="resume-modal-footer">
               <span>Press Esc or select outside the window to close.</span>

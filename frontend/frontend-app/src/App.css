@@ -3258,11 +3258,33 @@ code {
   color: var(--text-primary);
 }
 
-.resume-modal-canvas {
+.modal-close-button {
+  gap: 0.42rem;
+  border: 1px solid var(--border);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.modal-close-button span:first-child {
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.resume-modal-viewer {
+  display: grid;
   min-height: 0;
   flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  background: #111119;
+}
+
+.resume-modal-canvas {
+  min-height: 0;
   overflow: auto;
   padding: 1.5rem;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(139, 142, 255, 0.72) rgba(255, 255, 255, 0.035);
+  scrollbar-width: thin;
   background:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
@@ -3272,11 +3294,100 @@ code {
 
 .resume-modal-canvas img {
   display: block;
-  width: min(680px, 100%);
+  min-width: 0;
+  max-width: none;
   height: auto;
   margin: auto;
   background: white;
   box-shadow: 0 20px 55px rgba(0, 0, 0, 0.48);
+  transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.resume-modal-canvas::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.resume-modal-canvas::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.resume-modal-canvas::-webkit-scrollbar-thumb {
+  border: 3px solid #111119;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #9a9cff, #6569dd);
+}
+
+.resume-modal-canvas::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #b5b6ff, #7d80ee);
+}
+
+.document-zoom-rail {
+  z-index: 1;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 0.8rem 0.55rem;
+  border-left: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.1), transparent 28%), var(--bg-secondary);
+  box-shadow: -12px 0 28px rgba(0, 0, 0, 0.18);
+}
+
+.document-zoom-rail button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.document-zoom-rail button:hover {
+  border-color: rgba(139, 142, 255, 0.5);
+  background: rgba(99, 102, 241, 0.15);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.document-zoom-track {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.document-zoom-track span {
+  color: var(--text-muted);
+  font-size: 0.45rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.document-zoom-track input {
+  width: 5px;
+  min-height: 145px;
+  flex: 1;
+  accent-color: #8b8eff;
+  cursor: ns-resize;
+  direction: rtl;
+  writing-mode: vertical-lr;
+}
+
+.document-zoom-rail .document-zoom-value {
+  width: 42px;
+  height: 26px;
+  border-color: rgba(139, 142, 255, 0.24);
+  color: #afb1ff;
+  font-size: 0.52rem;
+  font-weight: 700;
 }
 
 .resume-modal-footer {
@@ -3597,6 +3708,35 @@ code {
     min-height: 100vh;
     border: 0;
     border-radius: 0;
+  }
+
+  .resume-modal-viewer {
+    grid-template-columns: minmax(0, 1fr) 52px;
+  }
+
+  .resume-modal-canvas {
+    padding: 0.65rem;
+  }
+
+  .document-zoom-rail {
+    padding: 0.55rem 0.35rem;
+  }
+
+  .document-zoom-rail button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .document-zoom-track {
+    min-height: 150px;
+  }
+
+  .document-zoom-track input {
+    min-height: 115px;
+  }
+
+  .modal-close-button span:last-child {
+    display: none;
   }
 
   .resume-modal-footer > span {
