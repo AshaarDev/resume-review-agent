@@ -68,13 +68,18 @@ LATEX_COMPILE_TIMEOUT_SECONDS=30
 CREATOR_ARTIFACT_TTL_HOURS=24
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_VISION_MODEL=gemini-3.6-flash
+GEMINI_VISION_FALLBACK_MODEL=gemini-3.1-flash-lite
 GEMINI_TIMEOUT_SECONDS=60
 ```
 
 `GEMINI_VISION_MODEL` is configurable, but the production default is the
-account-verified `gemini-3.6-flash` model. `MODEL_NAME` remains the content
-review model; `ORCHESTRATOR_MODEL` is used only for final review synthesis;
-and `CREATOR_MODEL` is isolated from both so its model can change independently.
+account-verified `gemini-3.6-flash` model. If that model is temporarily
+unavailable, rate limited, times out, or returns an invalid response, visual
+review retries once with the pinned, lower-cost
+`GEMINI_VISION_FALLBACK_MODEL`. Set the fallback to an empty value to disable
+it. `MODEL_NAME` remains the content review model; `ORCHESTRATOR_MODEL` is
+used only for final review synthesis; and `CREATOR_MODEL` is isolated from
+both so its model can change independently.
 
 PDF generation requires `pdflatex` on the backend host. Without it, creation
 still succeeds partially and returns a downloadable `.tex` source artifact.

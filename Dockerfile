@@ -23,6 +23,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libreoffice-writer \
+        fonts-liberation2 \
         tesseract-ocr \
         texlive-fonts-recommended \
         texlive-latex-base \

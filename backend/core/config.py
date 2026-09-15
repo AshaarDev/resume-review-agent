@@ -15,6 +15,9 @@ class Settings:
     GEMINI_VISION_MODEL: str = os.getenv(
         "GEMINI_VISION_MODEL", "gemini-3.6-flash"
     )
+    GEMINI_VISION_FALLBACK_MODEL: str = os.getenv(
+        "GEMINI_VISION_FALLBACK_MODEL", "gemini-3.1-flash-lite"
+    )
     GEMINI_TIMEOUT_SECONDS: int = int(
         os.getenv("GEMINI_TIMEOUT_SECONDS", "60")
     )

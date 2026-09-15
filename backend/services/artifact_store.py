@@ -10,10 +10,10 @@ from core.config import settings
 
 ARTIFACT_ROOT = Path(__file__).resolve().parent.parent / "artifacts"
 _ARTIFACT_ID = re.compile(r"^[0-9a-f]{32}$")
-_ALLOWED_FILENAMES = {"resume.tex", "resume.pdf"}
+_ALLOWED_FILENAMES = {"resume.tex", "resume.pdf", "resume.docx"}
 
 
-def save_resume_artifacts(tex_path: Path, pdf_path: Path | None) -> str:
+def save_resume_artifacts(tex_path: Path, pdf_path: Path | None, docx_path: Path | None = None) -> str:
     cleanup_expired_artifacts()
     artifact_id = uuid.uuid4().hex
     destination = ARTIFACT_ROOT / artifact_id
@@ -21,6 +21,8 @@ def save_resume_artifacts(tex_path: Path, pdf_path: Path | None) -> str:
     shutil.copy2(tex_path, destination / "resume.tex")
     if pdf_path and pdf_path.exists():
         shutil.copy2(pdf_path, destination / "resume.pdf")
+    if docx_path and docx_path.exists():
+        shutil.copy2(docx_path, destination / "resume.docx")
     return artifact_id
 
 

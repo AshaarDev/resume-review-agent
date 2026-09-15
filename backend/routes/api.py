@@ -133,16 +133,13 @@ def create_resume_workflow(request: ResumeWorkflowRequest) -> ResumeWorkflowResp
 def download_resume_artifact(
     artifact_id: str, filename: str, preview: bool = False
 ) -> FileResponse:
-    """Download only a generated resume.tex or resume.pdf artifact."""
+    """Download only an allowlisted generated resume artifact."""
 
     path = resolve_artifact(artifact_id, filename)
     if path is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
-    media_type = (
-        "application/pdf"
-        if path.suffix == ".pdf"
-        else "application/x-tex"
-    )
+    media_type = {".pdf": "application/pdf", ".tex": "application/x-tex",
+                  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}[path.suffix]
     return FileResponse(
         path,
         media_type=media_type,

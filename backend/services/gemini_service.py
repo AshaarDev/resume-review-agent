@@ -57,7 +57,7 @@ def reset_client() -> None:
     _client = None
 
 
-def _classify_api_error(exc: Exception) -> GeminiServiceError:
+def _classify_api_error(exc: Exception, model: str) -> GeminiServiceError:
     name = type(exc).__name__.lower()
     message = str(exc).lower()
     if (
@@ -67,8 +67,18 @@ def _classify_api_error(exc: Exception) -> GeminiServiceError:
     ):
         return GeminiServiceError(
             "GEMINI_MODEL_UNAVAILABLE",
-            f"The configured Gemini model '{settings.GEMINI_VISION_MODEL}' "
+            f"The configured Gemini model '{model}' "
             "is not available for this API account.",
+        )
+    if "unauthorized" in message or "401" in message:
+        return GeminiServiceError(
+            "GEMINI_AUTHENTICATION_FAILED",
+            "The visual review service could not authenticate with Gemini.",
+        )
+    if "permission_denied" in message or "forbidden" in message or "403" in message:
+        return GeminiServiceError(
+            "GEMINI_PERMISSION_DENIED",
+            "The Gemini API key cannot access the visual review service.",
         )
     if "timeout" in name or "deadline" in name or "timeout" in message:
         return GeminiServiceError(
@@ -79,9 +89,56 @@ def _classify_api_error(exc: Exception) -> GeminiServiceError:
             "GEMINI_RATE_LIMITED",
             "The visual review service is temporarily rate limited.",
         )
+    if (
+        "service_unavailable" in name
+        or "unavailable" in message
+        or "high demand" in message
+        or "503" in message
+    ):
+        return GeminiServiceError(
+            "GEMINI_SERVICE_UNAVAILABLE",
+            "The visual review service is temporarily unavailable.",
+        )
     return GeminiServiceError(
         "GEMINI_API_ERROR", "The visual review service failed to respond."
     )
+
+
+_FALLBACK_ERROR_CODES = {
+    "GEMINI_API_ERROR",
+    "GEMINI_INVALID_RESPONSE",
+    "GEMINI_MODEL_UNAVAILABLE",
+    "GEMINI_RATE_LIMITED",
+    "GEMINI_SERVICE_UNAVAILABLE",
+    "GEMINI_TIMEOUT",
+}
+
+
+def _configured_models() -> List[str]:
+    """Return the primary and distinct optional fallback model in call order."""
+
+    primary = settings.GEMINI_VISION_MODEL.strip()
+    fallback = settings.GEMINI_VISION_FALLBACK_MODEL.strip()
+    models = [primary]
+    if fallback and fallback != primary:
+        models.append(fallback)
+    return models
+
+
+def _parse_response(response: Any) -> VisualReviewResult:
+    """Validate one model response against the shared visual-review schema."""
+
+    try:
+        if response.parsed is not None:
+            return VisualReviewResult.model_validate(response.parsed)
+        if not response.text:
+            raise ValueError("Gemini returned an empty response")
+        return VisualReviewResult.model_validate_json(response.text)
+    except (ValidationError, ValueError, TypeError) as exc:
+        raise GeminiServiceError(
+            "GEMINI_INVALID_RESPONSE",
+            "The visual review service returned an invalid structured response.",
+        ) from exc
 
 
 def analyze_images_structured(
@@ -115,37 +172,54 @@ def analyze_images_structured(
             types.Part.from_bytes(data=image_path.read_bytes(), mime_type="image/png")
         )
 
-    try:
-        response = get_client().models.generate_content(
-            model=settings.GEMINI_VISION_MODEL,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=VisualReviewResult,
-            ),
-        )
-    except GeminiServiceError:
-        raise
-    except Exception as exc:
-        classified_error = _classify_api_error(exc)
-        if classified_error.code == "GEMINI_API_ERROR":
+    models = _configured_models()
+    client = get_client()
+    last_error: Optional[GeminiServiceError] = None
+
+    for index, model in enumerate(models):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=VisualReviewResult,
+                ),
+            )
+            result = _parse_response(response)
+            if index:
+                logger.info(
+                    "Gemini visual review succeeded with fallback model %s",
+                    model,
+                )
+            return result
+        except GeminiServiceError as exc:
+            current_error = exc
+        except Exception as exc:
+            current_error = _classify_api_error(exc, model)
+
+        has_fallback = index + 1 < len(models)
+        if has_fallback and current_error.code in _FALLBACK_ERROR_CODES:
+            logger.warning(
+                "Gemini visual model %s failed (%s); trying fallback model %s",
+                model,
+                current_error.code,
+                models[index + 1],
+            )
+            last_error = current_error
+            continue
+
+        if current_error.code == "GEMINI_API_ERROR":
             logger.exception("Gemini visual review request failed")
         else:
             logger.warning(
-                "Gemini visual review unavailable: %s",
-                classified_error.code,
+                "Gemini visual review unavailable on model %s: %s",
+                model,
+                current_error.code,
             )
-        raise classified_error from exc
+        raise current_error
 
-    try:
-        if response.parsed is not None:
-            return VisualReviewResult.model_validate(response.parsed)
-        if not response.text:
-            raise ValueError("Gemini returned an empty response")
-        return VisualReviewResult.model_validate_json(response.text)
-    except (ValidationError, ValueError, TypeError) as exc:
-        logger.warning("Invalid Gemini structured response: %s", exc)
-        raise GeminiServiceError(
-            "GEMINI_INVALID_RESPONSE",
-            "The visual review service returned an invalid structured response.",
-        ) from exc
+    # The loop always raises or returns, but keep an explicit safe failure guard.
+    raise last_error or GeminiServiceError(
+        "GEMINI_API_ERROR", "The visual review service failed to respond."
+    )

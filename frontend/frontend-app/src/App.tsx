@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import ResumeBuilder from './components/ResumeBuilder';
 import { analyzeResume, artifactUrl, createResume } from './services/api';
 import type { ReviewAgentResult, WorkflowResponse } from './types';
 import './App.css';
@@ -500,6 +501,7 @@ function SignInPage({ navigate }: { navigate: (path: string) => void }) {
 }
 
 function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
+  const [buildMode, setBuildMode] = useState(false);
   const [mode, setMode] = useState<WorkspaceMode>('review');
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -528,7 +530,7 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
   const [facts, setFacts] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const activeModeRef = useRef<WorkspaceMode>(mode);
+  const activeModeRef = useRef<WorkspaceMode | 'build'>(mode);
   const [resultRevealSequence, setResultRevealSequence] = useState(0);
   const workflow = workflows[mode];
   const loading = loadingStates[mode];
@@ -554,8 +556,8 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
     }));
 
   useEffect(() => {
-    activeModeRef.current = mode;
-  }, [mode]);
+    activeModeRef.current = buildMode ? 'build' : mode;
+  }, [mode, buildMode]);
 
   useEffect(() => {
     if (resultRevealSequence === 0) return;
@@ -583,11 +585,11 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
   };
 
   const changeMode = (next: WorkspaceMode) => {
+    setBuildMode(false);
     setMode(next);
   };
 
-  const runReview = async () => {
-    if (!file) return setErrorFor('review', 'Choose a PDF, DOCX, PNG, or JPG resume first.');
+  const reviewFile = async (candidate: File) => {
     setLoadingFor('review', true);
     setWorkflowFor('review', null);
     setErrorFor('review', '');
@@ -595,7 +597,7 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
       revealWorkflow(
         'review',
         await analyzeResume(
-          file,
+          candidate,
           contexts.review.jobDescription,
           contexts.review.instructions,
         ),
@@ -605,6 +607,19 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
     } finally {
       setLoadingFor('review', false);
     }
+  };
+
+  const runReview = async () => {
+    if (!file) return setErrorFor('review', 'Choose a PDF, DOCX, PNG, or JPG resume first.');
+    await reviewFile(file);
+  };
+
+  const reviewBuilderResume = async (candidate: File) => {
+    setFile(candidate);
+    activeModeRef.current = 'review';
+    setBuildMode(false);
+    setMode('review');
+    await reviewFile(candidate);
   };
 
   const runCreation = async () => {
@@ -669,11 +684,14 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
         <div className="sidebar-header"><Logo onClick={() => navigate('/')} /></div>
         <nav className="sidebar-nav" aria-label="Resume workflows">
           <span className="nav-section-title">WORKSPACE</span>
-          <button className={`nav-item ${mode === 'review' ? 'active' : ''}`} onClick={() => changeMode('review')}>
+          <button className={`nav-item ${!buildMode && mode === 'review' ? 'active' : ''}`} onClick={() => changeMode('review')}>
             <span className="nav-item-icon">◎</span><span>Review Resume</span>{workflows.review && <small>SAVED</small>}
           </button>
-          <button className={`nav-item ${mode === 'create' ? 'active' : ''}`} onClick={() => changeMode('create')}>
+          <button className={`nav-item ${!buildMode && mode === 'create' ? 'active' : ''}`} onClick={() => changeMode('create')}>
             <span className="nav-item-icon">✦</span><span>Create Resume</span><small>{workflows.create ? 'SAVED' : 'NEW'}</small>
+          </button>
+          <button className={`nav-item ${buildMode ? 'active' : ''}`} onClick={() => setBuildMode(true)}>
+            <span className="nav-item-icon">+</span><span>BUILD YOUR OWN</span><small>NEW</small>
           </button>
         </nav>
         <div className="sidebar-footer">
@@ -684,11 +702,13 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
 
       <main className="main-content">
         <header className="app-header">
-          <div><span className="header-kicker">RESUME WORKSPACE</span><h1>{mode === 'review' ? 'Review Resume' : 'Create Resume'}</h1></div>
-          <div className="system-status"><span /> AI workflow online</div>
+          <div><span className="header-kicker">RESUME WORKSPACE</span><h1>{buildMode ? 'Build Your Own' : mode === 'review' ? 'Review Resume' : 'Create Resume'}</h1></div>
+          <div className="system-status"><span /> {buildMode ? 'Manual resume studio' : 'AI workflow online'}</div>
         </header>
 
         <div className="page-content">
+          <div hidden={!buildMode}><ResumeBuilder onSendToReview={reviewBuilderResume} /></div>
+          <div hidden={buildMode}>
           <div className="page-intro">
             <div>
               <span className="section-kicker">{mode === 'review' ? 'MULTI-MODEL ANALYSIS' : 'GROUNDED GENERATION'}</span>
@@ -785,6 +805,7 @@ function WorkspacePage({ navigate }: { navigate: (path: string) => void }) {
               <WorkflowResults workflow={workflow} />
             </div>
           )}
+          </div>
         </div>
       </main>
     </div>

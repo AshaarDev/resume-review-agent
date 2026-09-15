@@ -10,6 +10,7 @@ from core.creator_schemas import (
     GeneratedResumeDocument,
     ResumeCreationBrief,
 )
+from services.inline_formatting import parse_inline_formatting
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parent.parent
@@ -43,17 +44,31 @@ def template_metadata() -> dict:
 
 
 def render_resume_latex(
-    brief: ResumeCreationBrief, document: GeneratedResumeDocument
+    brief: ResumeCreationBrief, document: GeneratedResumeDocument | None,
+    *, ordered_blocks: dict[str, str] | None = None, section_order: list[str] | None = None
 ) -> str:
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
     replacements = {
         "%%__HEADER__%%": _render_header(brief),
-        "%%__SUMMARY__%%": _render_summary(document),
-        "%%__EXPERIENCE__%%": _render_experience(document),
-        "%%__PROJECTS__%%": _render_projects(document),
-        "%%__EDUCATION__%%": _render_education(document),
-        "%%__SKILLS__%%": _render_skills(document),
+        "%%__SUMMARY__%%": _render_summary(document) if document else "",
+        "%%__EXPERIENCE__%%": _render_experience(document) if document else "",
+        "%%__PROJECTS__%%": _render_projects(document) if document else "",
+        "%%__EDUCATION__%%": _render_education(document) if document else "",
+        "%%__SKILLS__%%": _render_skills(document) if document else "",
     }
+    if ordered_blocks is not None:
+        blocks = {
+            "skill_groups": replacements["%%__SKILLS__%%"],
+            "experiences": replacements["%%__EXPERIENCE__%%"],
+            "projects": replacements["%%__PROJECTS__%%"],
+            "education": replacements["%%__EDUCATION__%%"],
+            **ordered_blocks,
+        }
+        keys = list(dict.fromkeys([*(section_order or []), *blocks]))
+        body = "\n".join(blocks[key] for key in keys if key in blocks)
+        for marker in ("%%__EXPERIENCE__%%", "%%__PROJECTS__%%", "%%__EDUCATION__%%"):
+            template = template.replace(marker, "")
+        replacements["%%__SKILLS__%%"] = body
     for marker, rendered in replacements.items():
         template = template.replace(marker, rendered)
     return template
@@ -62,16 +77,16 @@ def render_resume_latex(
 def _render_header(brief: ResumeCreationBrief) -> str:
     contact_parts = []
     if brief.phone:
-        contact_parts.append(r"\texttt{" + latex_escape(brief.phone) + "}")
+        contact_parts.append(latex_escape(brief.phone))
     if brief.email:
         contact_parts.append(
-            r"\texttt{"
+            r"{"
             + latex_escape(brief.email)
             + "}"
         )
     if brief.location:
         contact_parts.append(
-            r"\texttt{"
+            r"{"
             + latex_escape(brief.location)
             + "}"
         )
@@ -85,13 +100,13 @@ def _render_header(brief: ResumeCreationBrief) -> str:
                 + "}}"
             )
     joined = r" \hspace{1pt} $|$ \hspace{1pt} ".join(contact_parts)
-    contact_line = rf"    \small {joined} \\ \vspace{{-3pt}}" if joined else ""
+    contact_line = rf"    {{\fontsize{{8.5}}{{10}}\selectfont {joined}\par}}" if joined else ""
     return "\n".join(
         [
-            r"\begin{center}",
-            rf"    \textbf{{\Huge {latex_escape(brief.full_name)}}} \\ \vspace{{5pt}}",
+            r"{\centering",
+            rf"    {{\fontsize{{22}}{{24}}\selectfont\textbf{{{latex_escape(brief.full_name)}}}\par}}\vspace{{3pt}}",
             contact_line,
-            r"\end{center}",
+            r"\par}\vspace{2pt}",
         ]
     )
 
@@ -112,13 +127,14 @@ def _render_experience(document: GeneratedResumeDocument) -> str:
         return ""
     lines = [r"\section{EXPERIENCE}", r"\resumeSubHeadingListStart"]
     for entry in document.experiences:
+        organization = entry.organization + (f", {entry.location}" if entry.location else "")
         lines.extend(
             [
                 r"\resumeSubheading",
-                f"  {{{latex_escape(entry.organization)}}}"
+                f"  {{{latex_escape(organization)}}}"
                 f"{{{latex_escape(entry.date_range)}}}",
                 f"  {{{latex_escape(entry.role)}}}"
-                f"{{{latex_escape(entry.location)}}}",
+                "{}",
                 r"\resumeItemListStart",
             ]
         )
@@ -136,10 +152,11 @@ def _render_projects(document: GeneratedResumeDocument) -> str:
         name = latex_escape(entry.name)
         if entry.url and _safe_url(entry.url):
             name = rf"\href{{{entry.url}}}{{\myuline{{{name}}}}}"
+        stack = rf" $|$ \textit{{{latex_escape(entry.stack)}}}" if entry.stack else ""
         lines.extend(
             [
                 r"\resumeProjectHeading",
-                rf"  {{\textbf{{{name}}}}}{{{latex_escape(entry.date_range)}}}",
+                rf"  {{\textbf{{{name}}}{stack}}}{{{latex_escape(entry.date_range)}}}",
                 r"\resumeItemListStart",
             ]
         )
@@ -154,19 +171,20 @@ def _render_education(document: GeneratedResumeDocument) -> str:
         return ""
     lines = [r"\section{EDUCATION}", r"\resumeSubHeadingListStart"]
     for entry in document.education:
+        institution = entry.institution + (f", {entry.location}" if entry.location else "")
         lines.extend(
             [
                 r"\resumeSubheading",
-                f"  {{{latex_escape(entry.institution)}}}"
+                f"  {{{latex_escape(institution)}}}"
                 f"{{{latex_escape(entry.date_range)}}}",
                 f"  {{{latex_escape(entry.degree)}}}"
-                f"{{{latex_escape(entry.location)}}}",
+                "{}",
             ]
         )
         if entry.details:
             lines.append(r"\resumeItemListStart")
             lines.extend(
-                rf"\resumeItem{{{latex_escape(detail)}}}"
+                rf"\resumeItem{{{render_inline_latex(detail)}}}"
                 for detail in entry.details
             )
             lines.append(r"\resumeItemListEnd")
@@ -186,7 +204,7 @@ def _render_skills(document: GeneratedResumeDocument) -> str:
         )
     return "\n".join(
         [
-            r"\section{SKILLS}",
+            r"\section{TECHNICAL SKILLS}",
             r"\begin{itemize}[leftmargin=0in, label={}]",
             r"\small{\item{",
             *groups,
@@ -197,11 +215,11 @@ def _render_skills(document: GeneratedResumeDocument) -> str:
 
 
 def _render_bullet(bullet: GeneratedResumeBullet) -> str:
-    rendered = _render_emphasis(bullet.text, bullet.bold_phrases)
+    rendered = render_inline_latex(bullet.text, bullet.bold_phrases)
     return rf"\resumeItem{{{rendered}}}"
 
 
-def _render_emphasis(text: str, phrases: list[str]) -> str:
+def _render_bold_phrases(text: str, phrases: list[str]) -> str:
     usable = sorted(
         {phrase for phrase in phrases if phrase and phrase in text},
         key=len,
@@ -217,6 +235,25 @@ def _render_emphasis(text: str, phrases: list[str]) -> str:
         rendered.append(r"\textbf{" + latex_escape(match.group(0)) + "}")
         cursor = match.end()
     rendered.append(latex_escape(text[cursor:]))
+    return "".join(rendered)
+
+
+def render_inline_latex(
+    text: str, bold_phrases: list[str] | None = None
+) -> str:
+    """Convert safe inline markers and generated bold phrases to LaTeX."""
+
+    rendered = []
+    phrases = bold_phrases or []
+    for segment in parse_inline_formatting(text):
+        value = _render_bold_phrases(
+            segment.text, [] if segment.bold else phrases
+        )
+        if segment.italic:
+            value = r"\textit{" + value + "}"
+        if segment.bold:
+            value = r"\textbf{" + value + "}"
+        rendered.append(value)
     return "".join(rendered)
 
 

@@ -37,7 +37,9 @@ def test_renderer_uses_template_and_selective_bold():
 
     rendered = render_resume_latex(brief, document)
 
-    assert r"\Huge Ada \& Grace" in rendered
+    assert r"\fontsize{22}{24}" in rendered and r"Ada \& Grace" in rendered
+    assert r"\usepackage{mathpazo}" in rendered
+    assert r"\fontsize{9.2}{10.6}" in rendered
     assert r"\textbf{40\%}" in rendered
     assert r"\section{PROJECTS}" in rendered
     assert "%%__PROJECTS__%%" not in rendered

@@ -49,6 +49,7 @@ class GeneratedResumeEntry(BaseModel):
 
 class GeneratedProjectEntry(BaseModel):
     name: str = Field(min_length=1, max_length=180)
+    stack: str = Field(default="", max_length=180)
     date_range: str = Field(default="", max_length=100)
     url: Optional[str] = Field(default=None, max_length=500)
     source_fact_ids: list[str] = Field(min_length=1, max_length=8)

@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from routes.api import router as api_router
+from routes.builder import router as builder_router
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -24,10 +25,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Page-Count"],
 )
 
 # Include API routes
 app.include_router(api_router)
+app.include_router(builder_router)
 
 # Vite emits production assets into ``dist/assets``. The legacy static
 # directory remains a local fallback until a React build has been generated.
